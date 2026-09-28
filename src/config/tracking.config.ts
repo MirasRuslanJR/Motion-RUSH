@@ -33,6 +33,15 @@ export const TRACKING_CONFIG = {
     slowGpuMs: 70,
   },
 
+  worker: {
+    /** Run MediaPipe in a Web Worker so inference never blocks rendering. */
+    enabled: true,
+    /** Model download + init budget before falling back to the main thread. */
+    initTimeoutMs: 45000,
+    /** A frame whose result has not come back in this time is dropped. */
+    resultTimeoutMs: 2000,
+  },
+
   /** Keep the last pose this long when landmarks drop out for a moment. */
   holdLostMs: 320,
   /** Tracking-status changes must persist this long before the UI reacts (anti-flicker). */

@@ -11,7 +11,7 @@ function describe(f: Readonly<MotionFrame>, engine: MotionEngine): string {
   const c = f.classification;
   const b = f.baseline;
   const lines = [
-    `FPS ${f.stats.fps} · inference ${f.stats.inferenceFps}/${f.stats.targetInferenceFps} Hz · ${n(f.stats.inferenceMs, 1)} ms · ${ui.delegate ?? '—'}`,
+    `FPS ${f.stats.fps} · inference ${f.stats.inferenceFps}/${f.stats.targetInferenceFps} Hz · ${n(f.stats.inferenceMs, 1)} ms · ${ui.delegate ?? '—'} · ${ui.backend ?? '—'}`,
     `camera ${f.videoWidth}×${f.videoHeight} · aspect ${n(f.aspect)}`,
     `tracking ${f.quality.status} (ui ${ui.tracking}) · core ${n(f.quality.coreVisibility)} · hips ${f.quality.hipsVisible ? 'yes' : 'no'} · sw ${n(f.quality.shoulderWidth, 3)}`,
     `lowLight ${ui.lowLight} · headroom ${!f.quality.lowHeadroom} · multi ${ui.multiplePeople}`,

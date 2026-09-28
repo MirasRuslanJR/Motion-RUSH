@@ -5,7 +5,7 @@ import { TopBar } from '../components/TopBar';
 import { classifyCameraError, type CameraErrorKind } from '../features/camera/cameraErrors';
 import { MotionEngine } from '../features/engine/MotionEngine';
 import type { SessionResult } from '../features/gameplay/types';
-import { loadPoseTracker } from '../features/tracking/PoseTracker';
+import { loadPoseBackend } from '../features/tracking/poseBackend';
 import { computeSessionStats } from '../features/results/sessionStats';
 import { useMotionUi } from '../hooks/useEngine';
 import { sfx } from '../lib/audio/sfx';
@@ -41,7 +41,7 @@ export function App() {
 
   // Preload the pose model while the player reads the landing screen.
   useEffect(() => {
-    void loadPoseTracker().catch(() => undefined);
+    void loadPoseBackend().catch(() => undefined);
   }, []);
 
   useEffect(() => {

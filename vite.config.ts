@@ -7,6 +7,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   base: './',
   plugins: [react()],
+  // The pose worker is an ES module: MediaPipe then loads its WASM glue via import().
+  worker: { format: 'es' },
   server: { host: true },
   preview: { host: true },
   build: {

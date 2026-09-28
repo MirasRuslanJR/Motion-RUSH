@@ -13,8 +13,8 @@ if (!existsSync(source)) {
   process.exit(1);
 }
 
-// The ES-module build is only used with FilesetResolver(useModule=true), which we don't.
-const files = readdirSync(source).filter((file) => !file.includes('_module_'));
+// Module build → the pose Web Worker; classic SIMD / no-SIMD builds → main-thread fallback.
+const files = readdirSync(source);
 mkdirSync(target, { recursive: true });
 for (const file of files) {
   cpSync(join(source, file), join(target, file));

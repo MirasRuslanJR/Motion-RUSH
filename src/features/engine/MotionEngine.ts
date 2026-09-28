@@ -14,8 +14,9 @@ import type { ExpectedMotion, GestureEvent, GestureEventFeatures, GestureType } 
 import { assessFrame, isTrackable, NO_BODY_QUALITY, trackingMessage, type FrameQuality, type TrackingStatus } from '../tracking/frameQuality';
 import { normalizeLandmarks } from '../tracking/LandmarkNormalizer';
 import { copyPoseInto, createPose, type Pose } from '../tracking/landmarks';
+import type { Delegate } from '../tracking/landmarkerCore';
 import { MotionSmoother } from '../tracking/MotionSmoother';
-import { loadPoseTracker, type Delegate, type PoseTracker } from '../tracking/PoseTracker';
+import { loadPoseBackend, type PoseBackend, type PoseCallbacks, type PoseResult } from '../tracking/poseBackend';
 import { selectPrimaryPose } from '../tracking/poseSelection';
 
 /** Low-frequency state for React. Changes a few times per second at most. */
@@ -24,6 +25,8 @@ export interface MotionUiState {
   cameraError: CameraErrorKind | null;
   model: 'loading' | 'ready' | 'error';
   delegate: Delegate | null;
+  /** Where inference runs: a Web Worker (preferred) or the main thread. */
+  backend: PoseBackend['kind'] | null;
   tracking: TrackingStatus;
   trackingMessage: string;
   lowLight: boolean;
@@ -65,6 +68,7 @@ const INITIAL_UI: MotionUiState = {
   cameraError: null,
   model: 'loading',
   delegate: null,
+  backend: null,
   tracking: 'NO_BODY',
   trackingMessage: trackingMessage(NO_BODY_QUALITY),
   lowLight: false,
@@ -83,12 +87,13 @@ function summary(f: BodyFeatures | null): GestureEventFeatures | null {
 /**
  * Realtime Motion Engine.
  *
- *   CameraSource → PoseTracker → LandmarkNormalizer → MotionSmoother
+ *   CameraSource → PoseBackend (Web Worker) → LandmarkNormalizer → MotionSmoother
  *     → FeatureExtractor → GestureClassifier → GestureStateMachine (×2 channels)
  *     → ErrorDiagnosisEngine → listeners (game, renderers) / Store (React)
  *
- * Runs its own requestAnimationFrame loop. Inference is throttled adaptively
- * (12–30 Hz) while rendering listeners run every display frame.
+ * Runs its own requestAnimationFrame loop. Frames are handed to the pose
+ * backend (one in flight, ≤ 30 Hz); results are processed when they arrive,
+ * while rendering listeners run every display frame.
  */
 export class MotionEngine {
   readonly ui = new Store<MotionUiState>(INITIAL_UI);
@@ -110,10 +115,19 @@ export class MotionEngine {
   private readonly fpsMeter = new RateMeter();
   private readonly inferenceMeter = new RateMeter();
 
-  private tracker: PoseTracker | null = null;
+  private backend: PoseBackend | null = null;
+  private readonly callbacks: PoseCallbacks = {
+    onResult: (result) => this.processPoses(result),
+    onError: () => {
+      if (!this.disposed) this.ui.set({ model: 'error', camera: 'error', cameraError: 'model' });
+    },
+  };
   private raf = 0;
   private lastTick = 0;
   private lastInferenceAt = 0;
+  private lastProcessedAt = 0;
+  /** A pose result was processed since the previous animation frame. */
+  private resultArrived = false;
   private lastVideoTime = -1;
   private lastSeenAt = 0;
   private lastLightSampleAt = 0;
@@ -177,10 +191,10 @@ export class MotionEngine {
     this.raf = requestAnimationFrame(this.tick);
 
     try {
-      const tracker = await loadPoseTracker();
+      const backend = await loadPoseBackend();
       if (this.disposed) return;
-      this.tracker = tracker;
-      this.ui.set({ model: 'ready', delegate: tracker.delegate });
+      this.backend = backend;
+      this.ui.set({ model: 'ready', delegate: backend.delegate, backend: backend.kind });
     } catch {
       this.ui.set({ model: 'error', camera: 'error', cameraError: 'model' });
     }
@@ -239,8 +253,10 @@ export class MotionEngine {
     this.fpsMeter.tick(now);
 
     this.frame.time = now;
-    this.frame.inferred = false;
-    if (this.shouldInfer(now)) this.infer(now);
+    if (this.shouldInfer(now)) this.requestInference(now);
+    // Worker results arrive between frames; the main-thread backend answers inside requestInference.
+    this.frame.inferred = this.resultArrived;
+    this.resultArrived = false;
 
     this.frame.stats.fps = this.fpsMeter.rate;
     for (const listener of this.frameListeners) listener(this.frame, dt);
@@ -248,14 +264,25 @@ export class MotionEngine {
 
   private shouldInfer(now: number): boolean {
     const video = this.camera.video;
-    if (!this.tracker || video.readyState < 2 || video.videoWidth === 0) return false;
+    if (!this.backend || this.backend.busy || video.readyState < 2 || video.videoWidth === 0) return false;
     if (video.currentTime === this.lastVideoTime) return false;
     return now - this.lastInferenceAt >= 1000 / this.targetFps - 2;
   }
 
+  private requestInference(now: number): void {
+    const video = this.camera.video;
+    this.lastInferenceAt = now;
+    this.lastVideoTime = video.currentTime;
+    this.backend?.submit(video, now, this.callbacks);
+  }
+
+  /**
+   * Only the main-thread backend competes with rendering, so only it backs off.
+   * The worker backend is naturally limited to one frame in flight.
+   */
   private adaptInferenceRate(now: number, ms: number): void {
     this.avgInferenceMs = this.avgInferenceMs === 0 ? ms : this.avgInferenceMs * 0.9 + ms * 0.1;
-    if (now - this.lastRateChangeAt < 500) return;
+    if (this.backend?.kind !== 'main' || now - this.lastRateChangeAt < 500) return;
     const { maxFps, minFps, loadFactor } = TRACKING_CONFIG.inference;
     const budget = 1000 / this.targetFps;
     if (this.avgInferenceMs > budget * loadFactor && this.targetFps > minFps) {
@@ -267,28 +294,21 @@ export class MotionEngine {
     }
   }
 
-  private infer(now: number): void {
-    const tracker = this.tracker;
-    if (!tracker) return;
+  /** Everything after inference: cheap (< 1 ms), always on the main thread. */
+  private processPoses(result: PoseResult): void {
+    if (this.disposed) return;
+    const { poses } = result;
+    // Timestamps come from frame capture, so smoothing and state timing stay exact
+    // even when a worker answers a few milliseconds later.
+    const now = result.capturedAt;
     const video = this.camera.video;
-    const dtSinceLast = this.lastInferenceAt ? now - this.lastInferenceAt : 33;
-    this.lastInferenceAt = now;
-    this.lastVideoTime = video.currentTime;
-
-    const started = performance.now();
-    let poses;
-    try {
-      poses = tracker.detect(video, now);
-    } catch {
-      this.ui.set({ model: 'error', camera: 'error', cameraError: 'model' });
-      return;
-    }
-    const elapsed = performance.now() - started;
-    this.adaptInferenceRate(now, elapsed);
-    this.inferenceMeter.tick(now);
+    const dtSinceLast = this.lastProcessedAt ? now - this.lastProcessedAt : 33;
+    this.lastProcessedAt = now;
+    this.adaptInferenceRate(now, result.inferenceMs);
+    this.inferenceMeter.tick(performance.now());
+    this.resultArrived = true;
 
     const f = this.frame;
-    f.inferred = true;
     f.videoWidth = video.videoWidth;
     f.videoHeight = video.videoHeight;
     f.aspect = video.videoWidth / video.videoHeight;
@@ -360,7 +380,7 @@ export class MotionEngine {
     // 6. Publish low-frequency state, then events.
     const stableStatus = this.status.update(f.quality.status, now);
     this.ui.set({
-      delegate: tracker.delegate,
+      delegate: this.backend?.delegate ?? null,
       tracking: stableStatus,
       trackingMessage: trackingMessage({ ...f.quality, status: stableStatus }),
       lowHeadroom: f.quality.lowHeadroom,
