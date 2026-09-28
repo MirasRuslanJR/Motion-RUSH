@@ -11,6 +11,8 @@ Admit Hackathon 2026 · кейс «Motion — камера вместо джой
 | Режим «ошибка»: руки недостаточно высоко | Игра: камера управляет бегуном |
 | --- | --- |
 | ![Error mode](docs/screenshots/error-mode-arms.jpg) | ![Game](docs/screenshots/game.jpg) |
+| **Наклон на 87% от нужного: линия-цель и подсветка корпуса** | **Результаты, посчитанные из реального забега** |
+| ![Lean near miss](docs/screenshots/error-mode-lean.jpg) | ![Results](docs/screenshots/results.jpg) |
 
 > На скриншотах видеослой камеры скрыт: остались только скелет, «призрак» целевой позы и линии-цели, которые рисует система.
 
