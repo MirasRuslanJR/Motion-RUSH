@@ -21,6 +21,7 @@ import './GameScreen.css';
 
 const PHASE_NAMES = ['Warm-up', 'Flow', 'Rush', 'Challenge'];
 const END_REVEAL_MS = 1600;
+const MISS_TOAST_MS = 2200;
 
 interface HudState {
   score: number;
@@ -138,6 +139,8 @@ export function GameScreen({ engine, onFinish }: GameScreenProps) {
   const outcomeRef = useRef<GameOutcome | null>(null);
   const [hud, setHud] = useState<HudState>(() => snapshot(game, null));
   const hudRef = useRef(hud);
+  /** Why the last obstacle was missed — shown briefly so every miss is explained. */
+  const [missToast, setMissToast] = useState<{ id: number; message: string } | null>(null);
   const reduced = useReducedMotion() ?? false;
   const multiple = useMotionUi(engine, (s) => s.multiplePeople);
   const trackingMessage = useMotionUi(engine, (s) => s.trackingMessage);
@@ -179,6 +182,12 @@ export function GameScreen({ engine, onFinish }: GameScreenProps) {
   useEffect(() => () => engine.setExpected(null), [engine]);
 
   useEffect(() => {
+    if (!missToast) return;
+    const timer = window.setTimeout(() => setMissToast(null), MISS_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [missToast]);
+
+  useEffect(() => {
     if (!hud.outcome) return;
     const timer = window.setTimeout(() => onFinish(game.result()), END_REVEAL_MS);
     return () => window.clearTimeout(timer);
@@ -192,6 +201,7 @@ export function GameScreen({ engine, onFinish }: GameScreenProps) {
       renderer?.handleEvent(event, frame.time);
       soundFor(event);
       if (event.type === 'end') outcomeRef.current = event.outcome;
+      if (event.type === 'miss') setMissToast({ id: event.item.id, message: event.reason.message });
     }
     renderer?.render(game, frame, dt, frame.time);
     if (progressRef.current) progressRef.current.style.transform = `scaleX(${clamp(game.time / game.duration, 0, 1)})`;
@@ -232,6 +242,23 @@ export function GameScreen({ engine, onFinish }: GameScreenProps) {
               ))}
             </div>
           </div>
+
+          <AnimatePresence>
+            {missToast && playing && (
+              <motion.div
+                key={missToast.id}
+                className="hud__miss"
+                role="status"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <span className="t-label">Промах</span>
+                {missToast.message}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <AnimatePresence>
             {hud.combo >= 3 && playing && (

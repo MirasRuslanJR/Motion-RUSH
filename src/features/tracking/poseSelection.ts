@@ -62,6 +62,9 @@ export function selectPrimaryPose(
   if (primary) {
     summaries.forEach((s, i) => {
       if (!s || i === primaryIndex) return;
+      // The detector occasionally returns the same body twice — ignore overlapping duplicates.
+      const separation = Math.hypot(s.center.x - primary.center.x, s.center.y - primary.center.y);
+      if (separation < primary.scale * cfg.duplicateDistance) return;
       if (s.scale >= primary.scale * cfg.minRelativeScale && s.visibility >= cfg.minVisibility) {
         significantOthers++;
       }

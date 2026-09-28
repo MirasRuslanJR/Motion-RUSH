@@ -64,6 +64,11 @@ describe('pose selection', () => {
     expect(followed.primaryIndex).toBe(1);
   });
 
+  it('treats an overlapping duplicate detection as the same player', () => {
+    const res = selectPrimaryPose([toRaw(0.66, 0.16), toRaw(0.7, 0.15)], ASPECT, null);
+    expect(res.significantOthers).toBe(0);
+  });
+
   it('ignores small background people', () => {
     const res = selectPrimaryPose([toRaw(0.6, 0.16), toRaw(1.1, 0.05)], ASPECT, null);
     expect(res.primaryIndex).toBe(0);

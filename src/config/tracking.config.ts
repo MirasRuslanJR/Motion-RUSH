@@ -62,6 +62,8 @@ export const TRACKING_CONFIG = {
     /** A second pose counts only if it is at least this big relative to the player. */
     minRelativeScale: 0.55,
     minVisibility: 0.6,
+    /** A "second" pose whose shoulders are this close (in player shoulder widths) is a duplicate of the player. */
+    duplicateDistance: 0.9,
     persistMs: 700,
     clearMs: 600,
   },
