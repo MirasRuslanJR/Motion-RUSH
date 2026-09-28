@@ -1,0 +1,182 @@
+.viewport {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: var(--radius-l);
+  background: #020306;
+  border: 1px solid var(--line);
+  transition: border-color 0.4s;
+  min-height: 0;
+}
+
+.viewport.is-tracked {
+  border-color: rgba(46, 230, 255, 0.28);
+}
+
+.viewport__media {
+  position: absolute;
+  inset: 0;
+}
+
+.viewport__media video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  filter: saturate(0.75) brightness(0.8) contrast(1.05);
+  z-index: 0;
+}
+
+/* Dim + tint the feed so the skeleton reads first. */
+.viewport__media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(120% 90% at 50% 40%, transparent 40%, rgba(5, 6, 11, 0.7) 100%),
+    linear-gradient(rgba(10, 8, 30, 0.25), rgba(5, 6, 11, 0.35));
+  pointer-events: none;
+}
+
+.viewport__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+}
+
+.viewport__scan {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 4px);
+}
+
+.viewport__corners {
+  position: absolute;
+  inset: 14px;
+  z-index: 3;
+  pointer-events: none;
+  --c: rgba(242, 245, 255, 0.5);
+  background:
+    linear-gradient(var(--c), var(--c)) top left / 22px 1.5px no-repeat,
+    linear-gradient(var(--c), var(--c)) top left / 1.5px 22px no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / 22px 1.5px no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / 1.5px 22px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / 22px 1.5px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / 1.5px 22px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / 22px 1.5px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / 1.5px 22px no-repeat;
+}
+
+.viewport__tag {
+  position: absolute;
+  z-index: 4;
+  top: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(5, 6, 11, 0.6);
+  backdrop-filter: blur(6px);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--text-2);
+}
+
+.viewport__tag--tl {
+  left: 24px;
+}
+
+.viewport__tag--tr {
+  right: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+.live-dot.is-on {
+  background: var(--success);
+  box-shadow: 0 0 10px var(--success);
+  animation: live 1.6s ease-in-out infinite;
+}
+
+@keyframes live {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.viewport__gestures {
+  position: absolute;
+  z-index: 4;
+  left: 24px;
+  bottom: 24px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.viewport__banner {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  top: 64px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgba(255, 90, 61, 0.18);
+  border: 1px solid rgba(255, 90, 61, 0.6);
+  color: #ffd9d0;
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+}
+
+.viewport--pip {
+  width: 168px;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-m);
+}
+
+.viewport--pip .viewport__corners {
+  inset: 8px;
+}
+
+@media (max-width: 720px) {
+  .viewport__tag {
+    top: 14px;
+  }
+  .viewport__tag--tl {
+    left: 14px;
+  }
+  .viewport__tag--tr {
+    right: 14px;
+  }
+  .viewport__gestures {
+    left: 14px;
+    bottom: 14px;
+  }
+  .viewport__banner {
+    white-space: normal;
+    width: calc(100% - 28px);
+    top: 50px;
+  }
+}

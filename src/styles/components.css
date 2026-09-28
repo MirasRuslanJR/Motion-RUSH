@@ -1,0 +1,151 @@
+/* ── Progress ring ── */
+.ring {
+  position: relative;
+  flex: none;
+}
+
+.ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.ring__bg {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 5;
+}
+
+.ring__fg {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.ring--success .ring__fg {
+  stroke: var(--success);
+}
+
+.ring--warn .ring__fg {
+  stroke: var(--warn);
+}
+
+.ring__content {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+}
+
+/* ── Hold-to-confirm (both hands up) ── */
+.hold {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 20px 8px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(61, 255, 176, 0.35);
+  background: var(--success-soft);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.2s;
+}
+
+.hold:hover {
+  border-color: var(--success);
+}
+
+.hold__text {
+  display: flex;
+  flex-direction: column;
+}
+
+.hold__label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.hold__hint {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* ── Badges, spinner ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--line-strong);
+  color: var(--text-2);
+}
+
+.badge--success {
+  border-color: rgba(61, 255, 176, 0.5);
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.gesture-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(61, 255, 176, 0.16);
+  border: 1px solid rgba(61, 255, 176, 0.55);
+  color: var(--success);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(6px);
+}
+
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--cyan);
+  animation: spin 0.9s linear infinite;
+  vertical-align: -1px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Debug overlay (?debug=1) ── */
+.debug-panel {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 100;
+  max-width: min(720px, calc(100vw - 24px));
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid var(--line-strong);
+  color: #b8ffe6;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  pointer-events: none;
+}

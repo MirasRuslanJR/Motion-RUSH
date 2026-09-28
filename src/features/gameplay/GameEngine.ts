@@ -1,0 +1,403 @@
+import { GAME_CONFIG } from '../../config/game.config';
+import type { Verdict } from '../gestures/diagnosisRules';
+import { isErrorVerdict } from '../gestures/ErrorDiagnosisEngine';
+import { MOTION_META, type ExpectedMotion } from '../gestures/types';
+import { courseDuration, generateCourse } from './course';
+import {
+  OBSTACLE_REQUIREMENT,
+  type ClearQuality,
+  type CourseItem,
+  type GameOutcome,
+  type Lane,
+  type MissReason,
+  type ObstacleRecord,
+  type SessionResult,
+} from './types';
+
+export type GamePhase = 'countdown' | 'running' | 'paused' | 'resuming' | 'ended';
+
+export interface DiagnosisInput {
+  expected: ExpectedMotion;
+  verdict: Verdict;
+  ruleId: string;
+  message: string;
+}
+
+/** Everything the game needs from the motion engine for one frame. */
+export interface PlayerInput {
+  trackable: boolean;
+  lane: Lane;
+  jumpHeld: boolean;
+  crouchHeld: boolean;
+  /** Per-frame diagnosis for the current expectation. */
+  diagnosis: DiagnosisInput | null;
+  /** Throttled hint that is actually on screen. */
+  hint: DiagnosisInput | null;
+}
+
+export type GameEvent =
+  | { type: 'countdown'; value: number }
+  | { type: 'clear'; item: CourseItem; quality: ClearQuality; points: number; combo: number; multiplier: number }
+  | { type: 'miss'; item: CourseItem; reason: MissReason }
+  | { type: 'orb'; item: CourseItem; points: number }
+  | { type: 'combo'; combo: number; multiplier: number }
+  | { type: 'jump' }
+  | { type: 'pause' }
+  | { type: 'resume' }
+  | { type: 'end'; outcome: GameOutcome };
+
+interface ActiveObstacle {
+  item: CourseItem;
+  required: ExpectedMotion;
+  promptAt: number;
+  satisfiedSince: number | null;
+  firstSatisfiedAt: number | null;
+  hadErrorHint: boolean;
+  lastErrorHint: MissReason | null;
+  lastRawError: MissReason | null;
+}
+
+const TOO_EARLY: Record<ExpectedMotion, string> = {
+  JUMP: 'Прыжок был слишком рано — поднимай руки, когда барьер уже рядом',
+  CROUCH: 'Встал слишком рано — держи присед, пока луч не пролетит',
+  LEAN_LEFT: 'Вернулся раньше времени — держи наклон, пока ворота не пройдены',
+  LEAN_RIGHT: 'Вернулся раньше времени — держи наклон, пока ворота не пройдены',
+  CENTER: 'Ушёл из центра раньше времени — стой ровно, пока ворота не пройдены',
+};
+
+type GameConfig = typeof GAME_CONFIG;
+
+/**
+ * Deterministic game logic. No DOM, no randomness at runtime:
+ * the same course + the same inputs always produce the same result.
+ */
+export class GameEngine {
+  readonly course: CourseItem[];
+  readonly duration: number;
+  private readonly cfg: GameConfig;
+
+  phase: GamePhase = 'countdown';
+  time = 0;
+  score = 0;
+  combo = 0;
+  bestCombo = 0;
+  energy: number;
+  lane: Lane = 0;
+  airborne = false;
+  ducking = false;
+  jumpStartedAt = Number.NEGATIVE_INFINITY;
+
+  private pending: CourseItem[];
+  private orbs: CourseItem[];
+  private active: ActiveObstacle | null = null;
+  private readonly records: ObstacleRecord[] = [];
+  private countdownElapsed = 0;
+  private countdownShown: number | null = null;
+  private lostFor = 0;
+  private stableFor = 0;
+  private resumeElapsed = 0;
+  private prevJumpHeld = false;
+  private prevCrouchHeld = false;
+  private lastCrouchEndAt = Number.NEGATIVE_INFINITY;
+  private gesturesDetected = 0;
+  private hintsShown = 0;
+  private lastHintKey: string | null = null;
+  private orbsCollected = 0;
+  private readonly timeline: { t: number; score: number }[] = [{ t: 0, score: 0 }];
+  private outcome: GameOutcome | null = null;
+
+  constructor(course: CourseItem[] = generateCourse(), cfg: GameConfig = GAME_CONFIG) {
+    this.cfg = cfg;
+    this.course = course;
+    this.duration = courseDuration(course, cfg.course);
+    this.energy = cfg.energy;
+    this.pending = course.filter((c) => c.kind !== 'ORB');
+    this.orbs = course.filter((c) => c.kind === 'ORB');
+  }
+
+  get multiplier(): number {
+    const s = this.cfg.scoring;
+    return Math.min(s.maxMultiplier, 1 + Math.floor(this.combo / s.comboPerMultiplier));
+  }
+
+  /** Motion the player must perform right now (drives error mode), if any. */
+  get expected(): ExpectedMotion | null {
+    return this.phase === 'running' || this.phase === 'paused' || this.phase === 'resuming'
+      ? (this.active?.required ?? null)
+      : null;
+  }
+
+  get activeItem(): CourseItem | null {
+    return this.active?.item ?? null;
+  }
+
+  /** Next required obstacle (active or upcoming) — for the HUD cue. */
+  get nextRequired(): CourseItem | null {
+    return this.active?.item ?? this.pending[0] ?? null;
+  }
+
+  get countdownValue(): number | null {
+    return this.countdownShown;
+  }
+
+  get resumeProgress(): number {
+    return this.phase === 'resuming' ? this.resumeElapsed / this.cfg.resumeCountdownMs : 0;
+  }
+
+  update(dtMs: number, input: PlayerInput): GameEvent[] {
+    const events: GameEvent[] = [];
+    switch (this.phase) {
+      case 'countdown':
+        this.updateCountdown(dtMs, input, events);
+        break;
+      case 'running':
+        if (!input.trackable) {
+          this.lostFor += dtMs;
+          if (this.lostFor >= this.cfg.lostGraceMs) {
+            this.phase = 'paused';
+            this.stableFor = 0;
+            events.push({ type: 'pause' });
+            break;
+          }
+        } else {
+          this.lostFor = 0;
+        }
+        this.step(dtMs, input, events);
+        break;
+      case 'paused':
+        this.stableFor = input.trackable ? this.stableFor + dtMs : 0;
+        if (this.stableFor >= this.cfg.resumeStableMs) {
+          this.phase = 'resuming';
+          this.resumeElapsed = 0;
+          events.push({ type: 'resume' });
+        }
+        break;
+      case 'resuming':
+        if (!input.trackable) {
+          this.phase = 'paused';
+          this.stableFor = 0;
+          events.push({ type: 'pause' });
+          break;
+        }
+        this.resumeElapsed += dtMs;
+        if (this.resumeElapsed >= this.cfg.resumeCountdownMs) {
+          this.phase = 'running';
+          this.lostFor = 0;
+        }
+        break;
+      case 'ended':
+        break;
+    }
+    return events;
+  }
+
+  /** External pause (e.g. tab hidden). */
+  pause(): void {
+    if (this.phase === 'running' || this.phase === 'resuming') {
+      this.phase = 'paused';
+      this.stableFor = 0;
+    }
+  }
+
+  private updateCountdown(dtMs: number, input: PlayerInput, events: GameEvent[]): void {
+    if (!input.trackable) {
+      this.countdownElapsed = 0;
+      this.countdownShown = null;
+      return;
+    }
+    this.countdownElapsed += dtMs;
+    const step = this.cfg.countdownStepMs;
+    const value = Math.max(0, 3 - Math.floor(this.countdownElapsed / step));
+    if (value !== this.countdownShown) {
+      this.countdownShown = value;
+      events.push({ type: 'countdown', value });
+    }
+    if (value === 0) {
+      this.phase = 'running';
+      this.prevJumpHeld = input.jumpHeld;
+      this.prevCrouchHeld = input.crouchHeld;
+      this.lane = input.lane;
+    }
+  }
+
+  private satisfied(required: ExpectedMotion): boolean {
+    switch (required) {
+      case 'LEAN_LEFT':
+        return this.lane === -1;
+      case 'LEAN_RIGHT':
+        return this.lane === 1;
+      case 'CENTER':
+        return this.lane === 0;
+      case 'JUMP':
+        return this.airborne;
+      case 'CROUCH':
+        return this.ducking;
+    }
+  }
+
+  private step(dtMs: number, input: PlayerInput, events: GameEvent[]): void {
+    this.time += dtMs;
+    const t = this.time;
+
+    // Player state (edges count as detected gestures).
+    if (input.jumpHeld && !this.prevJumpHeld) {
+      this.jumpStartedAt = t;
+      this.gesturesDetected++;
+      events.push({ type: 'jump' });
+    }
+    if (input.crouchHeld && !this.prevCrouchHeld) this.gesturesDetected++;
+    if (!input.crouchHeld && this.prevCrouchHeld) this.lastCrouchEndAt = t;
+    if (input.lane !== this.lane && input.lane !== 0) this.gesturesDetected++;
+    this.prevJumpHeld = input.jumpHeld;
+    this.prevCrouchHeld = input.crouchHeld;
+    this.lane = input.lane;
+    this.airborne = input.jumpHeld || t - this.jumpStartedAt <= this.cfg.airtimeMs;
+    this.ducking = input.crouchHeld || t - this.lastCrouchEndAt <= this.cfg.duckGraceMs;
+
+    this.updateOrbs(t, events);
+    this.updateObstacles(t, input, events);
+
+    const second = Math.floor(t / 1000);
+    const last = this.timeline[this.timeline.length - 1];
+    if (last && second > last.t) this.timeline.push({ t: second, score: this.score });
+
+    if (this.energy <= 0) this.end('out-of-energy', events);
+    else if (this.pending.length === 0 && t >= this.duration) this.end('complete', events);
+  }
+
+  private updateOrbs(t: number, events: GameEvent[]): void {
+    const w = this.cfg.orbWindowMs;
+    while (this.orbs.length > 0) {
+      const orb = this.orbs[0];
+      if (!orb || t < orb.arriveAt - w) break;
+      if (this.lane === orb.lane) {
+        const points = this.cfg.scoring.orb * this.multiplier;
+        this.score += points;
+        this.orbsCollected++;
+        events.push({ type: 'orb', item: orb, points });
+        this.orbs.shift();
+      } else if (t > orb.arriveAt + w) {
+        this.orbs.shift();
+      } else {
+        break;
+      }
+    }
+  }
+
+  private updateObstacles(t: number, input: PlayerInput, events: GameEvent[]): void {
+    const next = this.pending[0];
+    if (!this.active && next && t >= next.arriveAt - this.cfg.promptWindowMs) {
+      if (next.kind === 'ORB') return;
+      this.active = {
+        item: next,
+        required: OBSTACLE_REQUIREMENT[next.kind],
+        promptAt: t,
+        satisfiedSince: null,
+        firstSatisfiedAt: null,
+        hadErrorHint: false,
+        lastErrorHint: null,
+        lastRawError: null,
+      };
+    }
+    const a = this.active;
+    if (!a) return;
+
+    // Error-mode bookkeeping: which hints the player saw for THIS obstacle.
+    const hint = input.hint;
+    if (hint && hint.expected === a.required && isErrorVerdict(hint.verdict)) {
+      a.hadErrorHint = true;
+      a.lastErrorHint = { ruleId: hint.ruleId, message: hint.message };
+      const key = `${a.item.id}|${hint.ruleId}|${hint.message}`;
+      if (key !== this.lastHintKey) {
+        this.lastHintKey = key;
+        this.hintsShown++;
+      }
+    }
+    const raw = input.diagnosis;
+    if (raw && raw.expected === a.required && isErrorVerdict(raw.verdict)) {
+      a.lastRawError = { ruleId: raw.ruleId, message: raw.message };
+    }
+
+    const ok = this.satisfied(a.required);
+    if (ok) {
+      a.satisfiedSince ??= t;
+      a.firstSatisfiedAt ??= t;
+    } else {
+      a.satisfiedSince = null;
+    }
+
+    if (t < a.item.arriveAt) return;
+    if (ok) {
+      const perfect = (a.satisfiedSince ?? t) <= a.item.arriveAt - this.cfg.perfectLeadMs;
+      this.resolveClear(a, perfect ? 'perfect' : 'good', events);
+    } else if (t > a.item.arriveAt + this.cfg.clearGraceMs) {
+      this.resolveMiss(a, events);
+    }
+  }
+
+  private record(a: ActiveObstacle, result: ClearQuality | 'miss', missReason: MissReason | null): void {
+    this.records.push({
+      id: a.item.id,
+      kind: a.item.kind,
+      arriveAt: a.item.arriveAt,
+      required: a.required,
+      result,
+      reactionMs: a.firstSatisfiedAt === null ? null : a.firstSatisfiedAt - a.promptAt,
+      hadErrorHint: a.hadErrorHint,
+      corrected: a.hadErrorHint && result !== 'miss',
+      missReason,
+    });
+    this.pending.shift();
+    this.active = null;
+  }
+
+  private resolveClear(a: ActiveObstacle, quality: ClearQuality, events: GameEvent[]): void {
+    const s = this.cfg.scoring;
+    const multiplier = this.multiplier;
+    const points = (quality === 'perfect' ? s.perfect : s.clear) * multiplier;
+    this.score += points;
+    this.combo++;
+    this.bestCombo = Math.max(this.bestCombo, this.combo);
+    this.record(a, quality, null);
+    events.push({ type: 'clear', item: a.item, quality, points, combo: this.combo, multiplier });
+    if (this.combo % s.comboPerMultiplier === 0) {
+      events.push({ type: 'combo', combo: this.combo, multiplier: this.multiplier });
+    }
+  }
+
+  private resolveMiss(a: ActiveObstacle, events: GameEvent[]): void {
+    const reason: MissReason =
+      a.firstSatisfiedAt !== null
+        ? { ruleId: 'TOO_EARLY', message: TOO_EARLY[a.required] }
+        : (a.lastErrorHint ??
+          a.lastRawError ?? { ruleId: 'NO_ATTEMPT', message: `Движения не было — ${MOTION_META[a.required].cue.toLowerCase()}` });
+    this.combo = 0;
+    this.energy = Math.max(0, this.energy - 1);
+    this.record(a, 'miss', reason);
+    events.push({ type: 'miss', item: a.item, reason });
+  }
+
+  private end(outcome: GameOutcome, events: GameEvent[]): void {
+    if (this.phase === 'ended') return;
+    this.phase = 'ended';
+    this.outcome = outcome;
+    this.active = null;
+    this.timeline.push({ t: Math.ceil(this.time / 1000), score: this.score });
+    events.push({ type: 'end', outcome });
+  }
+
+  result(): SessionResult {
+    return {
+      outcome: this.outcome ?? 'complete',
+      score: this.score,
+      bestCombo: this.bestCombo,
+      durationMs: this.time,
+      obstacles: [...this.records],
+      gesturesDetected: this.gesturesDetected,
+      hintsShown: this.hintsShown,
+      orbsCollected: this.orbsCollected,
+      orbsTotal: this.course.filter((c) => c.kind === 'ORB').length,
+      timeline: [...this.timeline],
+    };
+  }
+}

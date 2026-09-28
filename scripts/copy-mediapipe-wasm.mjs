@@ -13,8 +13,10 @@ if (!existsSync(source)) {
   process.exit(1);
 }
 
+// The ES-module build is only used with FilesetResolver(useModule=true), which we don't.
+const files = readdirSync(source).filter((file) => !file.includes('_module_'));
 mkdirSync(target, { recursive: true });
-for (const file of readdirSync(source)) {
+for (const file of files) {
   cpSync(join(source, file), join(target, file));
 }
-console.log(`[mediapipe] copied ${readdirSync(source).length} runtime files -> public/mediapipe/wasm`);
+console.log(`[mediapipe] copied ${files.length} runtime files -> public/mediapipe/wasm`);

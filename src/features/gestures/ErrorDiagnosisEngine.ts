@@ -82,7 +82,10 @@ export function diagnose(
   };
 }
 
-type HintConfig = typeof GESTURE_CONFIG.hints;
+interface HintConfig {
+  readonly debounceMs: number;
+  readonly minDisplayMs: number;
+}
 
 /**
  * Turns the per-frame diagnosis stream into calm, readable hints:
