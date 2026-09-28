@@ -61,7 +61,7 @@ export function CameraCheckScreen({ engine, onReady }: CameraCheckScreenProps) {
       state: !bodyVisible ? 'pending' : tracking === 'TOO_CLOSE' || tracking === 'TOO_FAR' ? 'bad' : 'ok',
       detail: tracking === 'TOO_CLOSE' ? 'слишком близко' : tracking === 'TOO_FAR' ? 'слишком далеко' : 'отлично',
     },
-    { icon: 'sun', label: 'Свет', state: lowLight ? 'warn' : 'ok', detail: lowLight ? 'темновато' : 'хорошо' },
+    { icon: 'sun', label: 'Свет', state: lowLight ? 'warn' : 'ok', detail: lowLight ? 'темновато — добавь света' : 'хорошо' },
     { icon: 'users', label: 'Один игрок', state: multiple ? 'bad' : 'ok', detail: multiple ? 'в кадре несколько людей' : 'да' },
   ];
 
@@ -71,7 +71,9 @@ export function CameraCheckScreen({ engine, onReady }: CameraCheckScreenProps) {
       ? 'Загружаем распознавание позы…'
       : tracking === 'OK'
         ? 'Отлично, тебя видно! Замри на секунду…'
-        : message;
+        : lowLight && !bodyVisible
+          ? 'Слишком темно — включи свет или повернись лицом к окну'
+          : message;
 
   return (
     <main className="screen setup">

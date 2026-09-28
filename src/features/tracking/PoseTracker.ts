@@ -1,5 +1,6 @@
 import { FilesetResolver, PoseLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
 import { TRACKING_CONFIG } from '../../config/tracking.config';
+import { DEBUG } from '../../lib/env';
 
 export type Delegate = 'GPU' | 'CPU';
 
@@ -18,7 +19,29 @@ function localSource(): AssetSource {
 
 const CDN_SOURCE: AssetSource = { wasm: TRACKING_CONFIG.wasmCdnBase, model: TRACKING_CONFIG.modelCdnUrl };
 
+/**
+ * The MediaPipe WASM runtime prints native glog lines ("W0928 … gl_context.cc",
+ * "INFO: Created TensorFlow Lite XNNPACK delegate") to the console, some via
+ * console.error. Hide only those INFO/WARNING-level lines; real errors (E-level)
+ * and everything else pass through. With ?debug=1 nothing is filtered.
+ */
+const MEDIAPIPE_NOISE = /^(?:[IW]\d{4} \d|INFO: )/;
+let logFilterInstalled = false;
+
+function installMediapipeLogFilter(): void {
+  if (logFilterInstalled || DEBUG) return;
+  logFilterInstalled = true;
+  for (const method of ['log', 'info', 'warn', 'error'] as const) {
+    const original = console[method].bind(console);
+    console[method] = (...args: unknown[]) => {
+      if (typeof args[0] === 'string' && MEDIAPIPE_NOISE.test(args[0])) return;
+      original(...args);
+    };
+  }
+}
+
 async function createLandmarker(source: AssetSource, delegate: Delegate): Promise<PoseLandmarker> {
+  installMediapipeLogFilter();
   const fileset = await FilesetResolver.forVisionTasks(source.wasm);
   return PoseLandmarker.createFromOptions(fileset, {
     baseOptions: { modelAssetPath: source.model, delegate },
@@ -45,6 +68,8 @@ export class PoseTracker {
   private lastTimestamp = 0;
   private consecutiveErrors = 0;
   private switching = false;
+  private readonly gpuTimings: number[] = [];
+  private gpuVerified = false;
 
   private constructor(landmarker: PoseLandmarker, source: AssetSource, delegate: Delegate) {
     this.landmarker = landmarker;
@@ -82,8 +107,10 @@ export class PoseTracker {
     const timestamp = Math.max(now, this.lastTimestamp + 1);
     this.lastTimestamp = timestamp;
     try {
+      const started = performance.now();
       const result = this.landmarker.detectForVideo(video, timestamp);
       this.consecutiveErrors = 0;
+      if (this.currentDelegate === 'GPU') this.checkGpuSpeed(performance.now() - started);
       return result.landmarks;
     } catch (error) {
       this.consecutiveErrors++;
@@ -93,6 +120,22 @@ export class PoseTracker {
       if (this.consecutiveErrors > TRACKING_CONFIG.inference.maxConsecutiveErrors * 4) throw error;
       return [];
     }
+  }
+
+  /**
+   * When Chrome blocklists the GPU, WebGL silently runs on a software
+   * rasterizer and the GPU delegate becomes 10–50× slower than XNNPACK on CPU.
+   * Detect that from real timings (skipping warm-up) and switch once.
+   */
+  private checkGpuSpeed(ms: number): void {
+    if (this.gpuVerified) return;
+    const { gpuWarmupFrames, gpuSampleFrames, slowGpuMs } = TRACKING_CONFIG.inference;
+    this.gpuTimings.push(ms);
+    if (this.gpuTimings.length < gpuWarmupFrames + gpuSampleFrames) return;
+    const samples = this.gpuTimings.slice(gpuWarmupFrames).sort((a, b) => a - b);
+    const median = samples[samples.length >> 1] ?? 0;
+    this.gpuVerified = true;
+    if (median > slowGpuMs) void this.switchToCpu();
   }
 
   private async switchToCpu(): Promise<void> {

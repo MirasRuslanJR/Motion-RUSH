@@ -107,11 +107,12 @@ export function drawSkeleton(ctx: CanvasRenderingContext2D, pose: Pose, p: Proje
     const y = p.y(j.y);
     const r = width * (ghost ? 1.1 : 1.35);
     if (errors.has(index)) {
-      const pr = r * (2.2 + Math.sin(pulse * Math.PI * 2) * 0.8);
-      ctx.fillStyle = rgba(PALETTE.error, 0.28 * alpha);
+      const pr = r * (2.4 + Math.sin(pulse * Math.PI * 2) * 0.9);
+      ctx.strokeStyle = rgba(PALETTE.error, 0.9 * alpha);
+      ctx.lineWidth = Math.max(1.5, r * 0.45);
       ctx.beginPath();
-      ctx.arc(x, y, pr * 1.6, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.arc(x, y, pr, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.fillStyle = rgba(PALETTE.error, alpha);
     } else if (highlight.has(index)) {
       ctx.fillStyle = rgba(opts.tone === 'success' ? PALETTE.success : PALETTE.cyan, 0.25 * alpha);

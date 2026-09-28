@@ -338,6 +338,13 @@ button {
   }
 }
 
+/* Phones: the setup panel already says "Шаг N", the stepper would overflow. */
+@media (max-width: 520px) {
+  .steps {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -8,7 +8,7 @@ import { setRingProgress } from '../../components/ringProgress';
 import { GAME_CONFIG } from '../../config/game.config';
 import type { MotionEngine, MotionFrame } from '../../features/engine/MotionEngine';
 import type { Diagnosis } from '../../features/gestures/ErrorDiagnosisEngine';
-import { MOTION_META } from '../../features/gestures/types';
+import { MOTION_META, type ExpectedMotion, type GestureType } from '../../features/gestures/types';
 import { generateCourse } from '../../features/gameplay/course';
 import { GameEngine, type GameEvent, type PlayerInput } from '../../features/gameplay/GameEngine';
 import { OBSTACLE_REQUIREMENT, type GameOutcome, type Lane, type SessionResult } from '../../features/gameplay/types';
@@ -98,6 +98,29 @@ function soundFor(event: GameEvent): void {
     default:
       break;
   }
+}
+
+const LEGEND: GestureType[] = ['LEAN_LEFT', 'LEAN_RIGHT', 'JUMP', 'CROUCH'];
+
+/** Controls reminder: lights up the move the camera recognises right now. */
+function MoveLegend({ engine, next }: { engine: MotionEngine; next: ExpectedMotion | null }) {
+  const lateral = useMotionUi(engine, (s) => s.lateral);
+  const vertical = useMotionUi(engine, (s) => s.vertical);
+  return (
+    <ul className="legend" aria-label="Управление">
+      {LEGEND.map((g) => {
+        const meta = MOTION_META[g];
+        const active = g === lateral || g === vertical;
+        return (
+          <li key={g} className={`${active ? 'is-active' : ''} ${g === next ? 'is-next' : ''}`}>
+            {meta.arrow && <Icon name={meta.arrow} size={16} />}
+            <span className="legend__name">{meta.title}</span>
+            <span className="legend__action">{meta.action}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 interface GameScreenProps {
@@ -301,12 +324,13 @@ export function GameScreen({ engine, onFinish }: GameScreenProps) {
       </section>
 
       <aside className="game__side">
-        <CameraViewport engine={engine} variant="panel" guidance={playing} />
+        <CameraViewport engine={engine} variant="panel" guidance={playing} className="game__camera" />
         {multiple && (
           <div className="game__warning" role="status">
             <Icon name="users" size={16} /> ONE PLAYER ONLY — оставь в кадре одного человека
           </div>
         )}
+        <MoveLegend engine={engine} next={playing ? nextMotion : null} />
       </aside>
     </main>
   );

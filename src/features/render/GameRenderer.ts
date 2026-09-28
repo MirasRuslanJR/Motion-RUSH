@@ -43,6 +43,13 @@ function project(z: number): number {
   return FOCAL / (FOCAL + Math.max(z, -FOCAL * 0.6));
 }
 
+function layout(w: number, h: number): Geometry {
+  const laneW = Math.min(w * 0.24, h * 0.34);
+  // Portrait (phones): lift the runner above the HUD hint that sits at the bottom.
+  const portrait = h > w * 0.9;
+  return { w, h, horizonY: h * (portrait ? 0.24 : 0.3), groundY: h * (portrait ? 0.66 : 0.9), vx: w / 2, laneW };
+}
+
 /**
  * Canvas renderer for the runner scene. Reads game + motion state, owns only
  * cosmetic state (smoothing, particles, flashes). Never mutates the game.
@@ -83,9 +90,7 @@ export class GameRenderer {
   }
 
   private geometry(): Geometry {
-    const { width: w, height: h } = this.sizing.size;
-    const laneW = Math.min(w * 0.24, h * 0.34);
-    return { w, h, horizonY: h * 0.3, groundY: h * 0.9, vx: w / 2, laneW };
+    return layout(this.sizing.size.width, this.sizing.size.height);
   }
 
   private groundY(g: Geometry, z: number): number {
@@ -204,7 +209,7 @@ export class GameRenderer {
     ctx.scale(size.dpr, size.dpr);
     const w = size.width;
     const h = size.height;
-    const horizon = h * 0.3;
+    const horizon = layout(w, h).horizonY;
     const sky = ctx.createLinearGradient(0, 0, 0, horizon);
     sky.addColorStop(0, '#04050a');
     sky.addColorStop(1, '#0d0a24');

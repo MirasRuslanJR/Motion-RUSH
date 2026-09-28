@@ -137,23 +137,26 @@ export function ScoreTimeline({ result }: { result: SessionResult }) {
           <strong>{fmt(hovered.score)}</strong> очков
         </div>
       )}
-      <table className="sr-only">
-        <caption>Очки по секундам</caption>
-        <thead>
-          <tr>
-            <th scope="col">Время</th>
-            <th scope="col">Очки</th>
-          </tr>
-        </thead>
-        <tbody>
-          {points.map((p) => (
-            <tr key={p.t}>
-              <td>{clock(p.t)}</td>
-              <td>{p.score}</td>
+      {/* Tables ignore height:1px, so the visually-hidden class goes on a wrapper. */}
+      <div className="sr-only">
+        <table>
+          <caption>Очки по секундам</caption>
+          <thead>
+            <tr>
+              <th scope="col">Время</th>
+              <th scope="col">Очки</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {points.map((p) => (
+              <tr key={p.t}>
+                <td>{clock(p.t)}</td>
+                <td>{p.score}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }

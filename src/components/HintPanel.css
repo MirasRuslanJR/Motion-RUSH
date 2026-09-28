@@ -137,3 +137,21 @@
 .hint--compact .hint__message {
   font-size: 17px;
 }
+
+/* Phones: keep the scene visible — message + thin meter only. */
+@media (max-width: 900px) {
+  .hint--compact {
+    padding: 8px 12px;
+    gap: 6px;
+  }
+  .hint--compact .hint__label,
+  .hint--compact .hint__meter-head {
+    display: none;
+  }
+  .hint--compact .hint__message {
+    font-size: 14px;
+  }
+  .hint--compact .hint__track {
+    height: 5px;
+  }
+}

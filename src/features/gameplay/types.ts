@@ -44,8 +44,8 @@ export interface ObstacleRecord {
   arriveAt: number;
   required: ExpectedMotion;
   result: ClearQuality | 'miss';
-  /** From prompt to first correct pose (ms), null if never. */
-  reactionMs: number | null;
+  /** How long before arrival the player was already in the correct pose (ms); null on a miss. */
+  leadMs: number | null;
   /** An error-mode hint was shown while this obstacle was active. */
   hadErrorHint: boolean;
   /** Hint shown, then the player fixed the motion and cleared it. */

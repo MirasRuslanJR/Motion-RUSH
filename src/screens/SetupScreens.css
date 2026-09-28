@@ -342,9 +342,13 @@
   margin-top: auto;
 }
 
+.tutorial__steps li {
+  min-width: 0;
+}
+
 @media (max-width: 900px) {
   .setup {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .setup__viewport {
     height: min(58vh, 520px);

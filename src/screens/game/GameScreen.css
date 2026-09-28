@@ -24,14 +24,63 @@
 }
 
 .game__side {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   min-height: 0;
 }
 
-.game__side .viewport {
-  height: 100%;
+/* Keep the camera at its native 4:3 so leaning never crops the player out of view. */
+.game__camera {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  flex: none;
+}
+
+.legend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legend li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    color 0.2s;
+}
+
+.legend li.is-next {
+  border-color: rgba(46, 230, 255, 0.55);
+  color: var(--text);
+}
+
+.legend li.is-active {
+  border-color: rgba(61, 255, 176, 0.7);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.legend__name {
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.legend__action {
+  grid-column: 2;
+  font-size: 12px;
+  color: var(--text-3);
 }
 
 .game__warning {
@@ -252,11 +301,25 @@
     padding: 0 10px 10px;
     gap: 10px;
   }
+  .game__camera {
+    aspect-ratio: auto;
+    flex: 1;
+    min-height: 0;
+  }
+  .legend {
+    display: none;
+  }
   .hud {
     padding: 12px;
   }
   .hud__cue-text {
     display: none;
+  }
+  .hud__cue {
+    padding: 6px 12px;
+  }
+  .hud__bottom {
+    gap: 6px;
   }
   .hud__combo {
     top: 70px;

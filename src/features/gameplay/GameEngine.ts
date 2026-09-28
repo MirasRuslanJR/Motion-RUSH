@@ -49,8 +49,9 @@ export type GameEvent =
 interface ActiveObstacle {
   item: CourseItem;
   required: ExpectedMotion;
-  promptAt: number;
+  /** Start of the current uninterrupted correct pose. */
   satisfiedSince: number | null;
+  /** First time the pose was correct at all (to detect "too early"). */
   firstSatisfiedAt: number | null;
   hadErrorHint: boolean;
   lastErrorHint: MissReason | null;
@@ -291,7 +292,6 @@ export class GameEngine {
       this.active = {
         item: next,
         required: OBSTACLE_REQUIREMENT[next.kind],
-        promptAt: t,
         satisfiedSince: null,
         firstSatisfiedAt: null,
         hadErrorHint: false,
@@ -342,7 +342,7 @@ export class GameEngine {
       arriveAt: a.item.arriveAt,
       required: a.required,
       result,
-      reactionMs: a.firstSatisfiedAt === null ? null : a.firstSatisfiedAt - a.promptAt,
+      leadMs: result === 'miss' || a.satisfiedSince === null ? null : Math.max(0, a.item.arriveAt - a.satisfiedSince),
       hadErrorHint: a.hadErrorHint,
       corrected: a.hadErrorHint && result !== 'miss',
       missReason,

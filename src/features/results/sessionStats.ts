@@ -9,7 +9,8 @@ export interface MoveStats {
   perfect: number;
   /** 0..1 */
   accuracy: number;
-  avgReactionMs: number | null;
+  /** Average time the player was in position before the obstacle arrived (ms). */
+  avgLeadMs: number | null;
 }
 
 export interface MistakeStat {
@@ -32,36 +33,39 @@ export interface SessionStats {
   errorsCorrected: number;
   hintsShown: number;
   topMistakes: MistakeStat[];
-  avgReactionMs: number | null;
+  avgLeadMs: number | null;
 }
 
 const MOVE_ORDER: ExpectedMotion[] = ['LEAN_LEFT', 'LEAN_RIGHT', 'JUMP', 'CROUCH', 'CENTER'];
 
+/** Better accuracy first; then being ready earlier; then more practice. */
 function byStrength(a: MoveStats, b: MoveStats): number {
   if (b.accuracy !== a.accuracy) return b.accuracy - a.accuracy;
-  const ra = a.avgReactionMs ?? Number.POSITIVE_INFINITY;
-  const rb = b.avgReactionMs ?? Number.POSITIVE_INFINITY;
-  if (ra !== rb) return ra - rb;
+  const la = a.avgLeadMs ?? -1;
+  const lb = b.avgLeadMs ?? -1;
+  if (la !== lb) return lb - la;
   return b.attempts - a.attempts;
 }
+
+const leads = (values: (number | null)[]) => values.filter((v): v is number => v !== null);
 
 /** All numbers come from the recorded run — nothing is estimated or faked. */
 export function computeSessionStats(result: SessionResult): SessionStats {
   const records = result.obstacles;
   const cleared = records.filter((r) => r.result !== 'miss');
-  const reactions = cleared.map((r) => r.reactionMs).filter((v): v is number => v !== null);
+  const allLeads = leads(cleared.map((r) => r.leadMs));
 
   const perMove: MoveStats[] = MOVE_ORDER.map((motion) => {
     const rs = records.filter((r) => r.required === motion);
     const ok = rs.filter((r) => r.result !== 'miss');
-    const rt = ok.map((r) => r.reactionMs).filter((v): v is number => v !== null);
+    const moveLeads = leads(ok.map((r) => r.leadMs));
     return {
       motion,
       attempts: rs.length,
       cleared: ok.length,
       perfect: rs.filter((r) => r.result === 'perfect').length,
       accuracy: rs.length ? ok.length / rs.length : 0,
-      avgReactionMs: rt.length ? mean(rt) : null,
+      avgLeadMs: moveLeads.length ? mean(moveLeads) : null,
     };
   }).filter((m) => m.attempts > 0);
 
@@ -92,6 +96,6 @@ export function computeSessionStats(result: SessionResult): SessionStats {
     errorsCorrected: records.filter((r) => r.corrected).length,
     hintsShown: result.hintsShown,
     topMistakes: [...mistakes.values()].sort((a, b) => b.count - a.count).slice(0, 3),
-    avgReactionMs: reactions.length ? mean(reactions) : null,
+    avgLeadMs: allLeads.length ? mean(allLeads) : null,
   };
 }

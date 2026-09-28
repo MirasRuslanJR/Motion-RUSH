@@ -22,7 +22,12 @@ export function MoveBars({ moves }: { moves: MoveStats[] }) {
               </span>
               <span className="bars__value">
                 <strong>{pct}%</strong> {m.cleared}/{m.attempts}
-                {m.avgReactionMs !== null && <span className="bars__meta"> · {(m.avgReactionMs / 1000).toFixed(1)} с</span>}
+                {m.avgLeadMs !== null && (
+                  <span className="bars__meta" title="В позиции до подлёта препятствия">
+                    {' '}
+                    · за {(m.avgLeadMs / 1000).toFixed(1)} с
+                  </span>
+                )}
               </span>
             </li>
           );

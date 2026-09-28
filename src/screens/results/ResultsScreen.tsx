@@ -35,7 +35,7 @@ function MoveCard({ title, move, tone }: { title: string; move: MoveStats | null
       </span>
       <span className="move-card__detail">
         {Math.round(move.accuracy * 100)}% · {move.cleared} из {move.attempts}
-        {move.avgReactionMs !== null && ` · реакция ${(move.avgReactionMs / 1000).toFixed(1)} с`}
+        {move.avgLeadMs !== null && ` · в позиции за ${(move.avgLeadMs / 1000).toFixed(1)} с`}
       </span>
       {tone === 'work' && <span className="move-card__tip">{meta.cue}</span>}
     </div>
@@ -56,8 +56,8 @@ export function ResultsScreen({ engine, result, recorded, onPlayAgain, onRecalib
     { label: 'Время сессии', value: seconds(result.durationMs) },
     { label: 'Perfect', value: `${stats.perfect} из ${stats.total}` },
     {
-      label: 'Средняя реакция',
-      value: stats.avgReactionMs === null ? '—' : `${(stats.avgReactionMs / 1000).toFixed(2)} с`,
+      label: 'Запас до препятствия',
+      value: stats.avgLeadMs === null ? '—' : `${(stats.avgLeadMs / 1000).toFixed(1)} с`,
     },
     { label: 'Энергосферы', value: `${result.orbsCollected} из ${result.orbsTotal}` },
   ];

@@ -26,6 +26,11 @@ export const TRACKING_CONFIG = {
     loadFactor: 0.6,
     /** Consecutive failures before switching GPU → CPU. */
     maxConsecutiveErrors: 4,
+    /** GPU timing check: ignore warm-up frames, then judge the median of the next N. */
+    gpuWarmupFrames: 5,
+    gpuSampleFrames: 10,
+    /** Median GPU inference above this (software WebGL) → switch to the CPU delegate. */
+    slowGpuMs: 70,
   },
 
   /** Keep the last pose this long when landmarks drop out for a moment. */

@@ -158,5 +158,8 @@ describe('session stats', () => {
     expect(stats.strongest?.accuracy).toBe(1);
     expect(stats.accuracy).toBeCloseTo(stats.cleared / stats.total);
     expect(stats.topMistakes[0]?.count).toBe(stats.misses);
+    // The bot switches pose as soon as a new obstacle becomes active → it is in position well before arrival.
+    expect(stats.avgLeadMs).toBeGreaterThan(GAME_CONFIG.perfectLeadMs);
+    expect(stats.perfect).toBe(stats.cleared);
   });
 });

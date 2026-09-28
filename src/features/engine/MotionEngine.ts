@@ -233,7 +233,8 @@ export class MotionEngine {
   private readonly tick = (now: number): void => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.tick);
-    const dt = this.lastTick ? Math.min(now - this.lastTick, 100) : 16;
+    // Clamp so a long stall (tab switch, GC) cannot teleport the game forward.
+    const dt = this.lastTick ? Math.min(now - this.lastTick, 250) : 16;
     this.lastTick = now;
     this.fpsMeter.tick(now);
 
@@ -359,6 +360,7 @@ export class MotionEngine {
     // 6. Publish low-frequency state, then events.
     const stableStatus = this.status.update(f.quality.status, now);
     this.ui.set({
+      delegate: tracker.delegate,
       tracking: stableStatus,
       trackingMessage: trackingMessage({ ...f.quality, status: stableStatus }),
       lowHeadroom: f.quality.lowHeadroom,

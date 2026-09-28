@@ -48,6 +48,11 @@ export function App() {
     sfx.setMuted(muted);
   }, [muted]);
 
+  // Every step starts at the top (matters on phones where setup screens scroll).
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [flow.phase]);
+
   // Release the camera when the page goes away.
   useEffect(() => {
     const release = () => engineRef.current?.dispose();
