@@ -26,6 +26,7 @@ import { ModeSelectScreen } from '../screens/ModeSelectScreen';
 import { PermissionScreen } from '../screens/PermissionScreen';
 import { ResultsScreen } from '../screens/results/ResultsScreen';
 import { TutorialScreen } from '../screens/TutorialScreen';
+import { VersusScreen } from '../screens/versus/VersusScreen';
 import { flowReducer, INITIAL_FLOW, type Phase } from './flow';
 
 /** Phases during which an online room stays open. */
@@ -246,6 +247,9 @@ export function App() {
         );
       }
       break;
+    case 'versus':
+      if (engine) screen = <VersusScreen key={flow.runId} engine={engine} mode={getMode(flow.mode)} onAgain={onPlayAgain} onModes={onModes} />;
+      break;
     case 'lobby':
       if (engine) {
         screen = (
@@ -303,7 +307,7 @@ export function App() {
         <div className="app__screens">
           <AnimatePresence initial={false}>
             <motion.div
-              key={flow.phase === 'game' || flow.phase === 'dance' ? `${flow.phase}-${flow.runId}` : flow.phase}
+              key={flow.phase === 'game' || flow.phase === 'dance' || flow.phase === 'versus' ? `${flow.phase}-${flow.runId}` : flow.phase}
               className="app__screen"
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}

@@ -1,0 +1,186 @@
+.versus {
+  position: relative;
+  padding: 0 var(--gutter) var(--gutter);
+  height: calc(100dvh - var(--topbar-h));
+  min-height: 520px;
+}
+
+.versus__stages {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  height: 100%;
+}
+
+.versus__stage {
+  position: relative;
+  border-radius: var(--radius-l);
+  border: 1px solid color-mix(in srgb, var(--pc) 45%, transparent);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.versus__hud {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  pointer-events: none;
+}
+
+.versus__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 10px;
+}
+
+.versus__tag {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: #05060b;
+  background: var(--pc);
+}
+
+.versus__score {
+  font-family: var(--font-display);
+  font-size: clamp(26px, 3.5vw, 40px);
+  line-height: 1;
+}
+
+.versus__combo {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--pc);
+}
+
+.versus__miss,
+.versus__lost,
+.versus__done {
+  padding: 8px 12px;
+  border-radius: var(--radius-s);
+  background: rgba(8, 10, 18, 0.9);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  max-width: 90%;
+}
+
+.versus__miss {
+  border: 1px solid rgba(255, 90, 61, 0.6);
+}
+
+.versus__cue {
+  margin-top: auto;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(8, 10, 18, 0.9);
+  border: 1px solid color-mix(in srgb, var(--pc) 50%, transparent);
+}
+
+.versus__setup,
+.versus__end {
+  text-align: center;
+  gap: 14px;
+  background: rgba(5, 6, 11, 0.94);
+  overflow-y: auto;
+}
+
+.versus__cam {
+  position: relative;
+  width: min(460px, 90%);
+}
+
+.versus__cam::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  border-left: 2px dashed rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+}
+
+.versus__camera {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+}
+
+.versus__cam-label {
+  position: absolute;
+  top: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(8, 10, 18, 0.85);
+}
+
+.versus__cam-label--p1 {
+  left: 12px;
+  color: #2ee6ff;
+}
+
+.versus__cam-label--p2 {
+  right: 12px;
+  color: #ffc14d;
+}
+
+.versus__calib {
+  display: grid;
+  gap: 8px;
+  width: min(460px, 90%);
+}
+
+.versus__calib-row {
+  display: grid;
+  grid-template-columns: 32px 1fr 160px;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  text-align: left;
+}
+
+.versus__calib-row b {
+  color: var(--pc);
+}
+
+.versus__calib-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.versus__calib-bar span {
+  display: block;
+  height: 100%;
+  background: var(--pc);
+  transition: width 0.2s;
+}
+
+.versus__results {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+@media (max-width: 700px) {
+  .versus__stages {
+    grid-template-columns: 1fr;
+  }
+  .versus {
+    height: auto;
+  }
+  .versus__stage {
+    height: 60dvh;
+  }
+}

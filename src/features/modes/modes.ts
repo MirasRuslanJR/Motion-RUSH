@@ -16,6 +16,7 @@ export type GameModeId =
   | 'practice'
   | 'dance'
   | 'dance-duo'
+  | 'versus'
   | 'duel';
 
 export interface GameModeDef {
@@ -84,6 +85,19 @@ const ALL_MODES: readonly GameModeDef[] = [
     energy: GAME_CONFIG.energy,
     ranked: false,
     goal: 'Перетанцуй соседа',
+  },
+  {
+    ...RUNNER,
+    id: 'versus',
+    players: 2,
+    title: 'Versus 2P',
+    badge: '2 ИГРОКА',
+    tagline: 'Двое у одного ноутбука: у каждого своя трасса — кто наберёт больше',
+    accent: '#2ee6ff',
+    course: 'standard',
+    energy: GAME_CONFIG.energy,
+    ranked: false,
+    goal: 'Обгони друга',
   },
   {
     ...RUNNER,

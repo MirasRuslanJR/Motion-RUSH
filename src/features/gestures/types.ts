@@ -55,14 +55,14 @@ export function schemeOf(mode: 'full' | 'upper' | null | undefined): ControlSche
 export const BODY_MOTION_META: Record<ExpectedMotion, MotionMeta> = {
   LEAN_LEFT: {
     title: 'Step left',
-    cue: 'Шагни влево всем телом',
+    cue: 'Перейди влево — в левую часть кадра',
     action: 'Левая полоса',
     arrow: 'left',
     focus: ['hips', 'legs'],
   },
   LEAN_RIGHT: {
     title: 'Step right',
-    cue: 'Шагни вправо всем телом',
+    cue: 'Перейди вправо — в правую часть кадра',
     action: 'Правая полоса',
     arrow: 'right',
     focus: ['hips', 'legs'],
