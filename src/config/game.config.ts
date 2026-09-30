@@ -14,7 +14,7 @@ export interface CoursePhase {
 
 /** GAME_CONFIG — gameplay tuning. Game time is paused while tracking is lost. */
 export const GAME_CONFIG = {
-  /** Fixed seed: every run is the same course, so scores are comparable. */
+  /** Default seed for tests and tools. Real runs use a new random seed every time (see modes). */
   seed: 0x4d4f54,
   energy: 5,
   countdownStepMs: 800,
@@ -55,26 +55,26 @@ export const GAME_CONFIG = {
   },
 
   course: {
-    firstArrivalMs: 3400,
+    firstArrivalMs: 3000,
     endPaddingMs: 1400,
     /** Opening sequence teaches every move once, in a fixed order. */
     intro: ['GATE_LEFT', 'HURDLE', 'GATE_RIGHT', 'BEAM'] as readonly ObstacleKind[],
     /** Extra gap when the player must swing from one side to the other. */
     crossoverPenaltyMs: 400,
     phases: [
-      { untilMs: 18000, gapMs: [2700, 3100], leadMs: 2600, kinds: ['GATE_LEFT', 'GATE_RIGHT', 'HURDLE', 'BEAM'], orbChance: 0.35 },
-      { untilMs: 36000, gapMs: [2200, 2500], leadMs: 2300, kinds: ['GATE_LEFT', 'GATE_RIGHT', 'HURDLE', 'BEAM'], orbChance: 0.4 },
+      { untilMs: 16000, gapMs: [2300, 2600], leadMs: 2300, kinds: ['GATE_LEFT', 'GATE_RIGHT', 'HURDLE', 'BEAM'], orbChance: 0.35 },
+      { untilMs: 34000, gapMs: [1900, 2150], leadMs: 2050, kinds: ['GATE_LEFT', 'GATE_RIGHT', 'HURDLE', 'BEAM'], orbChance: 0.4 },
       {
-        untilMs: 54000,
-        gapMs: [1850, 2150],
-        leadMs: 2100,
+        untilMs: 52000,
+        gapMs: [1650, 1850],
+        leadMs: 1850,
         kinds: ['GATE_LEFT', 'GATE_RIGHT', 'HURDLE', 'BEAM', 'GATE_CENTER'],
         orbChance: 0.4,
       },
       {
         untilMs: 70000,
-        gapMs: [1600, 1850],
-        leadMs: 1900,
+        gapMs: [1400, 1600],
+        leadMs: 1700,
         kinds: ['GATE_LEFT', 'GATE_RIGHT', 'HURDLE', 'BEAM', 'GATE_CENTER'],
         orbChance: 0.3,
       },
@@ -111,6 +111,34 @@ export const COURSES = {
       { untilMs: 100000, gapMs: [1450, 1650], leadMs: 1800, kinds: ALL, orbChance: 0.3 },
       { untilMs: 140000, gapMs: [1300, 1450], leadMs: 1650, kinds: ALL, orbChance: 0.3 },
       { untilMs: 600000, gapMs: [1150, 1300], leadMs: 1500, kinds: ALL, orbChance: 0.25 },
+    ],
+  },
+  /** 45 s at full speed from the first second. */
+  blitz: {
+    ...GAME_CONFIG.course,
+    firstArrivalMs: 2400,
+    phases: [
+      { untilMs: 25000, gapMs: [1350, 1500], leadMs: 1650, kinds: ALL, orbChance: 0.35 },
+      { untilMs: 45000, gapMs: [1200, 1350], leadMs: 1500, kinds: ALL, orbChance: 0.3 },
+    ],
+  },
+  /** Only jumps and squats — a leg workout. */
+  vertical: {
+    ...GAME_CONFIG.course,
+    intro: ['HURDLE', 'BEAM'],
+    phases: [
+      { untilMs: 30000, gapMs: [1800, 2100], leadMs: 2000, kinds: ['HURDLE', 'BEAM'], orbChance: 0.3 },
+      { untilMs: 60000, gapMs: [1450, 1650], leadMs: 1750, kinds: ['HURDLE', 'BEAM'], orbChance: 0.3 },
+    ],
+  },
+  /** Only gates — keep moving between the lanes. */
+  lanes: {
+    ...GAME_CONFIG.course,
+    intro: ['GATE_LEFT', 'GATE_RIGHT', 'GATE_CENTER'],
+    crossoverPenaltyMs: 300,
+    phases: [
+      { untilMs: 30000, gapMs: [1900, 2200], leadMs: 2000, kinds: ['GATE_LEFT', 'GATE_RIGHT', 'GATE_CENTER'], orbChance: 0.45 },
+      { untilMs: 60000, gapMs: [1550, 1750], leadMs: 1750, kinds: ['GATE_LEFT', 'GATE_RIGHT', 'GATE_CENTER'], orbChance: 0.45 },
     ],
   },
   /** Slow and forgiving — for learning the moves. */

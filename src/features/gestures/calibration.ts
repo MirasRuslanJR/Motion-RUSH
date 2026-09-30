@@ -19,6 +19,23 @@ export interface Baseline {
   torsoLength: number | null;
   /** full = hips visible (standing back), upper = seated / close framing. */
   mode: BodyMode;
+  /**
+   * Horizontal play area in frame units (the whole frame, or one half in
+   * two-player mode). Lanes in the body scheme are thirds of it.
+   */
+  region?: { x0: number; x1: number };
+}
+
+/** Where the body stands inside the play area: -1 left edge … 0 middle … +1 right edge. */
+export function zoneOf(x: number, region: { x0: number; x1: number }): number {
+  const half = (region.x1 - region.x0) / 2;
+  return half > 0 ? (x - (region.x0 + half)) / half : 0;
+}
+
+/** Inverse of zoneOf. */
+export function xOfZone(zone: number, region: { x0: number; x1: number }): number {
+  const half = (region.x1 - region.x0) / 2;
+  return region.x0 + half + zone * half;
 }
 
 export type CalibrationIssue = 'NOT_TRACKED' | 'ARMS_UP' | 'MOVING';

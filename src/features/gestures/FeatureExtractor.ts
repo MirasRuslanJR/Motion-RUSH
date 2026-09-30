@@ -2,7 +2,7 @@ import { GESTURE_CONFIG } from '../../config/gesture.config';
 import { TRACKING_CONFIG } from '../../config/tracking.config';
 import { angle, distance, lineTilt, midpoint, normalizeByBodyScale, tiltFromVertical, type Point } from '../../lib/math/geometry';
 import { LM, lm, type Pose } from '../tracking/landmarks';
-import type { Baseline } from './calibration';
+import { zoneOf, type Baseline } from './calibration';
 
 /** Absolute body geometry of one frame (mirrored frame units). */
 export interface BodyGeometry {
@@ -55,6 +55,11 @@ export interface BodyFeatures extends BodyGeometry {
   hipDrop: number | null;
   /** Hip-centre lateral shift in SW (null when hips are not visible) — whole-body movement. */
   hipShiftX: number | null;
+  /**
+   * Position in the play area (-1 left edge … +1 right edge), from the hips
+   * (shoulders if hips are hidden). null when no play area is known.
+   */
+  zoneX: number | null;
   /**
    * How far the whole body rose, in SW: min(hip rise, shoulder rise), so a shrug
    * or raised arms (shoulders only) never looks like a jump.
@@ -157,6 +162,7 @@ export function extractFeatures(pose: Pose, baseline: Baseline | null): BodyFeat
     noseDrop: normalizeByBodyScale(g.nose.y - refNose.y, scale),
     hipDrop,
     hipShiftX: g.hipCenter && baseHip ? normalizeByBodyScale(g.hipCenter.x - baseHip.x, scale) : null,
+    zoneX: baseline?.region ? zoneOf((g.hipCenter ?? g.shoulderCenter).x, baseline.region) : null,
     bodyRise: hipDrop === null ? -crouchDepth : Math.min(-hipDrop, -crouchDepth),
     leftHandLift,
     rightHandLift,

@@ -223,6 +223,8 @@ export class MotionEngine {
           shoulderCenter: { ...baseline.shoulderCenter },
           nose: { ...baseline.nose },
           hipCenter: baseline.hipCenter ? { ...baseline.hipCenter } : null,
+          // Lanes (body scheme) are parts of the whole picture unless a screen narrows it.
+          region: baseline.region ? { ...baseline.region } : { x0: 0, x1: this.frame.aspect },
         }
       : null;
     if (baseline) this.ui.set({ scheme: schemeOf(baseline.mode) });

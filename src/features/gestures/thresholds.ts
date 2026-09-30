@@ -32,9 +32,13 @@ export function thresholdsFor(type: GestureType, mode: BodyMode | null): Gesture
   }
 }
 
-/** Sideways offset used for lanes: hips (whole body) in the body scheme, shoulders when seated. */
+/**
+ * Sideways value used for lanes.
+ *   body:   where the player STANDS in the frame (left part = left lane) — no leaning tricks
+ *   seated: shoulder shift from the calibrated position (lean)
+ */
 export function lateralOffset(f: BodyFeatures, scheme: ControlScheme): number {
-  return scheme === 'body' ? (f.hipShiftX ?? f.leanX) : f.leanX;
+  return scheme === 'body' ? (f.zoneX ?? f.hipShiftX ?? f.leanX) : f.leanX;
 }
 
 /**

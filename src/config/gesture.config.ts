@@ -59,11 +59,15 @@ export const GESTURE_CONFIG = {
   /** ── body scheme (full body visible) ── */
   body: {
     step: {
-      /** Metric: lateral shift of the HIP centre (the whole body moves), in SW. */
+      /**
+       * Metric: WHERE the player stands in the frame — hip centre relative to the
+       * middle of the play area, in half-widths (-1 = left edge, +1 = right edge).
+       * Standing in the left part of the picture = left lane, right part = right lane.
+       */
       rest: 0,
-      near: 0.12,
-      activation: 0.4,
-      release: 0.24,
+      near: 0.1,
+      activation: 0.3,
+      release: 0.2,
       /** Shoulders moved this far while hips stayed → "only the upper body moves". */
       shouldersOnlyShift: 0.3,
     },

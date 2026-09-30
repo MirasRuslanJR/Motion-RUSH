@@ -5,7 +5,7 @@ create table if not exists public.scores (
   id          bigint generated always as identity primary key,
   created_at  timestamptz not null default now(),
   name        text        not null check (char_length(name) between 2 and 20),
-  mode        text        not null check (mode in ('classic', 'endless', 'sprint', 'daily', 'hardcore')),
+  mode        text        not null,
   score       integer     not null check (score between 0 and 1000000),
   accuracy    real        not null check (accuracy between 0 and 1),
   best_combo  integer     not null check (best_combo between 0 and 10000),
@@ -13,6 +13,11 @@ create table if not exists public.scores (
   -- Calendar day in Astana time (UTC+5), for the "today" board and the daily challenge.
   day         date        not null default ((now() at time zone 'Asia/Almaty')::date)
 );
+
+-- Ranked modes (re-run this block after adding a mode; it also upgrades an older table).
+alter table public.scores drop constraint if exists scores_mode_check;
+alter table public.scores add constraint scores_mode_check
+  check (mode in ('classic', 'endless', 'sprint', 'blitz', 'daily', 'hardcore', 'jumpduck', 'lanes', 'dance'));
 
 create index if not exists scores_mode_score_idx on public.scores (mode, score desc);
 create index if not exists scores_mode_day_score_idx on public.scores (mode, day, score desc);

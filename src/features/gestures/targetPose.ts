@@ -1,7 +1,7 @@
 import { GESTURE_CONFIG } from '../../config/gesture.config';
 import { clamp, distance, midpoint, rotateAround, tiltFromVertical, type Point } from '../../lib/math/geometry';
 import { copyPoseInto, createPose, LM, lm, UPPER_BODY_MAX_INDEX, type Pose } from '../tracking/landmarks';
-import type { Baseline } from './calibration';
+import { xOfZone, type Baseline } from './calibration';
 import { thresholdsFor } from './thresholds';
 import type { ExpectedMotion } from './types';
 
@@ -66,7 +66,11 @@ export function buildTargetPose(pose: Pose, expected: ExpectedMotion, baseline: 
       case 'LEAN_LEFT':
       case 'LEAN_RIGHT': {
         const dir = expected === 'LEAN_LEFT' ? -1 : 1;
-        const dx = baseHip.x + dir * reach(expected) - hip.x;
+        // Lanes are parts of the frame: the ghost stands inside the target part.
+        const targetX = baseline.region
+          ? xOfZone(dir * thresholdsFor(expected, baseline.mode).activation * OVERSHOOT, baseline.region)
+          : baseHip.x + dir * reach(expected);
+        const dx = targetX - hip.x;
         if (dir * dx > 0) translate(out, out.length - 1, dx, 0);
         break;
       }
@@ -88,7 +92,7 @@ export function buildTargetPose(pose: Pose, expected: ExpectedMotion, baseline: 
         break;
       }
       case 'CENTER':
-        translate(out, out.length - 1, baseHip.x - hip.x, 0);
+        translate(out, out.length - 1, (baseline.region ? xOfZone(0, baseline.region) : baseHip.x) - hip.x, 0);
         break;
     }
     return out;
@@ -162,17 +166,19 @@ export function targetGuides(expected: ExpectedMotion, baseline: Baseline, curre
       case 'LEAN_LEFT':
       case 'LEAN_RIGHT': {
         const dir = expected === 'LEAN_LEFT' ? -1 : 1;
-        return [
-          { orientation: 'vertical', value: hip.x + dir * act(expected), label: dir < 0 ? '◀ ШАГНИ СЮДА' : 'ШАГНИ СЮДА ▶' },
-        ];
+        const region = baseline.region;
+        const x = region ? xOfZone(dir * thresholdsFor(expected, baseline.mode).activation, region) : hip.x + dir * act(expected);
+        return [{ orientation: 'vertical', value: x, label: dir < 0 ? '◀ ПЕРЕЙДИ СЮДА' : 'ПЕРЕЙДИ СЮДА ▶' }];
       }
       case 'CROUCH':
         return [{ orientation: 'horizontal', value: hip.y + act('CROUCH'), label: 'ТАЗ НИЖЕ' }];
       case 'CENTER': {
-        const tol = GESTURE_CONFIG.center.tolerance * baseline.scale;
+        const tol = GESTURE_CONFIG.center.tolerance;
+        const region = baseline.region;
+        const [l, r] = region ? [xOfZone(-tol, region), xOfZone(tol, region)] : [hip.x - tol * baseline.scale, hip.x + tol * baseline.scale];
         return [
-          { orientation: 'vertical', value: hip.x - tol, label: '' },
-          { orientation: 'vertical', value: hip.x + tol, label: 'ЦЕНТР' },
+          { orientation: 'vertical', value: l, label: '' },
+          { orientation: 'vertical', value: r, label: 'ЦЕНТР' },
         ];
       }
     }

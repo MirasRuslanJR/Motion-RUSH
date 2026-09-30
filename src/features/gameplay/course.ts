@@ -36,9 +36,9 @@ function phaseAt(time: number, phases: readonly CoursePhase[]): CoursePhase | nu
 
 /**
  * Generates the full obstacle course up front.
- * Constraints keep it fair for camera input: every move is introduced once,
- * no more than two identical obstacles in a row, and extra time for
- * left↔right crossovers.
+ * Constraints keep it fair for camera input: every move is introduced once
+ * (in a random order), no more than two identical obstacles in a row, and
+ * extra time for left↔right crossovers.
  */
 export function generateCourse(seed: number = GAME_CONFIG.seed, cfg: CourseConfig = GAME_CONFIG.course): CourseItem[] {
   const rng = createRng(seed);
@@ -46,6 +46,12 @@ export function generateCourse(seed: number = GAME_CONFIG.seed, cfg: CourseConfi
   let id = 0;
   let time = cfg.firstArrivalMs;
   let introIndex = 0;
+  // Fisher–Yates: the opening teaches every move, but not always in the same order.
+  const intro = [...cfg.intro];
+  for (let i = intro.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [intro[i], intro[j]] = [intro[j] ?? 'HURDLE', intro[i] ?? 'HURDLE'];
+  }
   let prev: ObstacleKind | null = null;
   let prevPrev: ObstacleKind | null = null;
 
@@ -54,8 +60,8 @@ export function generateCourse(seed: number = GAME_CONFIG.seed, cfg: CourseConfi
     if (!phase) break;
 
     let kind: ObstacleKind;
-    if (introIndex < cfg.intro.length) {
-      kind = cfg.intro[introIndex] ?? 'HURDLE';
+    if (introIndex < intro.length) {
+      kind = intro[introIndex] ?? 'HURDLE';
       introIndex++;
     } else {
       const options = phase.kinds.filter((k) => !(k === prev && k === prevPrev));

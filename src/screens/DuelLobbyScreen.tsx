@@ -10,13 +10,20 @@ import './DuelLobbyScreen.css';
 interface DuelLobbyScreenProps {
   engine: MotionEngine;
   room: DuelRoom | null;
+  /** Code from an invite link (?room=CODE). */
+  initialCode?: string;
   onCreate: () => void;
   onJoin: (code: string) => void;
   onLeave: () => void;
   onStart: (seed: number) => void;
 }
 
+function inviteLink(code: string): string {
+  return `${location.origin}${location.pathname}?room=${code}`;
+}
+
 function RoomView({ engine, room, onLeave, onStart }: { engine: MotionEngine; room: DuelRoom; onLeave: () => void; onStart: (seed: number) => void }) {
+  const [copied, setCopied] = useState(false);
   const status = useStore(room.ui, (s) => s.status);
   const players = useStore(room.ui, (s) => s.players);
   const seed = useStore(room.ui, (s) => s.seed);
@@ -45,6 +52,18 @@ function RoomView({ engine, room, onLeave, onStart }: { engine: MotionEngine; ro
       <p className="lobby__code" aria-live="polite">
         {room.code}
       </p>
+      <button
+        type="button"
+        className="btn btn--ghost btn--small"
+        onClick={() => {
+          void navigator.clipboard
+            ?.writeText(inviteLink(room.code))
+            .then(() => setCopied(true))
+            .catch(() => undefined);
+        }}
+      >
+        {copied ? 'Ссылка скопирована — отправь сопернику' : 'Скопировать ссылку-приглашение'}
+      </button>
       {status === 'connecting' && <p className="lobby__hint">Подключаемся…</p>}
       <ul className="lobby__players">
         {[me ?? { ...room.me }, opponent].map((p, i) => (
@@ -77,8 +96,8 @@ function RoomView({ engine, room, onLeave, onStart }: { engine: MotionEngine; ro
 }
 
 /** Online duel lobby: create a room or join one by its 4-letter code. */
-export function DuelLobbyScreen({ engine, room, onCreate, onJoin, onLeave, onStart }: DuelLobbyScreenProps) {
-  const [code, setCode] = useState('');
+export function DuelLobbyScreen({ engine, room, initialCode = '', onCreate, onJoin, onLeave, onStart }: DuelLobbyScreenProps) {
+  const [code, setCode] = useState(() => normalizeRoomCode(initialCode));
 
   useEffect(() => {
     engine.setExpected(null);

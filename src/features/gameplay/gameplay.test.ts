@@ -17,10 +17,15 @@ const idle: PlayerInput = {
   hint: null,
 };
 
-/** Input that performs exactly what the game currently expects. */
-function perfectInput(expected: ExpectedMotion | null): PlayerInput {
+/** Jump this long before a barrier arrives (inside the airtime, early enough for PERFECT). */
+const JUMP_LEAD_MS = 450;
+
+/** Input that performs exactly what the game currently expects — jumps are timed, not held. */
+function perfectInput(expected: ExpectedMotion | null, g: GameEngine): PlayerInput {
   const lane: Lane = expected === 'LEAN_LEFT' ? -1 : expected === 'LEAN_RIGHT' ? 1 : 0;
-  return { ...idle, lane, jumpHeld: expected === 'JUMP', crouchHeld: expected === 'CROUCH' };
+  const item = g.activeItem;
+  const jumpHeld = expected === 'JUMP' && item !== null && item.arriveAt - g.time <= JUMP_LEAD_MS;
+  return { ...idle, lane, jumpHeld, crouchHeld: expected === 'CROUCH' };
 }
 
 function play(game: GameEngine, input: (g: GameEngine) => PlayerInput, maxMs = 200_000): GameEvent[] {
@@ -38,11 +43,12 @@ describe('course generation', () => {
   it('introduces every move first, then mixes, with sane spacing', () => {
     const course = generateCourse();
     const required = course.filter((c) => !isPickup(c.kind));
-    expect(required.slice(0, 4).map((c) => c.kind)).toEqual([...GAME_CONFIG.course.intro]);
-    expect(required.length).toBeGreaterThan(20);
+    // Every move is introduced first — in a seed-dependent order.
+    expect(required.slice(0, 4).map((c) => c.kind).sort()).toEqual([...GAME_CONFIG.course.intro].sort());
+    expect(required.length).toBeGreaterThan(25);
     for (let i = 1; i < required.length; i++) {
       const gap = (required[i]?.arriveAt ?? 0) - (required[i - 1]?.arriveAt ?? 0);
-      expect(gap).toBeGreaterThanOrEqual(1600);
+      expect(gap).toBeGreaterThanOrEqual(1400);
     }
     for (let i = 2; i < required.length; i++) {
       const same = required[i]?.kind === required[i - 1]?.kind && required[i]?.kind === required[i - 2]?.kind;
@@ -65,7 +71,7 @@ describe('game engine', () => {
 
   it('a perfect player clears the whole course', () => {
     const game = new GameEngine();
-    const events = play(game, (g) => perfectInput(g.expected));
+    const events = play(game, (g) => perfectInput(g.expected, g));
     const result = game.result();
     expect(result.outcome).toBe('complete');
     expect(events.some((e) => e.type === 'miss')).toBe(false);
@@ -85,7 +91,7 @@ describe('game engine', () => {
     const absorbed = events.filter((e) => e.type === 'shield-used').length;
     expect(misses.length - absorbed).toBe(GAME_CONFIG.energy);
     expect(misses[0]?.missReason?.ruleId).toBe('NO_ATTEMPT');
-    expect(misses[0]?.missReason?.message).toContain('наклони корпус влево');
+    expect(misses[0]?.missReason?.message).toMatch(/^Движения не было — \S/);
   });
 
   it('pauses game time while tracking is lost and resumes after a stable return', () => {
@@ -104,11 +110,14 @@ describe('game engine', () => {
   });
 
   it('records the error hint shown before a miss and credits corrections', () => {
-    const game = new GameEngine();
+    const game = new GameEngine([
+      { id: 0, kind: 'GATE_LEFT', arriveAt: 3000, leadMs: 2300, lane: -1 },
+      { id: 1, kind: 'HURDLE', arriveAt: 5600, leadMs: 2300, lane: 0 },
+    ]);
     const hint = { expected: 'LEAN_LEFT' as const, verdict: 'near' as const, ruleId: 'LEAN_INSUFFICIENT', message: 'Наклон недостаточный — сместись ещё левее' };
     // First gate: player tries, sees the hint, never gets there → miss with that reason.
-    // Countdown (3 × 800 ms) + first arrival (3400 ms) + grace.
-    play(game, (g) => (g.expected === 'LEAN_LEFT' ? { ...idle, hint, diagnosis: hint } : idle), 6400);
+    // Countdown (3 × 800 ms) + first arrival (3000 ms) + grace.
+    play(game, (g) => (g.expected === 'LEAN_LEFT' ? { ...idle, hint, diagnosis: hint } : idle), 5900);
     const first = game.result().obstacles[0];
     expect(first?.result).toBe('miss');
     expect(first?.missReason?.ruleId).toBe('LEAN_INSUFFICIENT');
@@ -121,7 +130,7 @@ describe('game engine', () => {
       (g) => {
         if (g.expected !== 'JUMP') return idle;
         hinted += DT;
-        return hinted < 400 ? { ...idle, hint: jumpHint } : { ...idle, jumpHeld: true };
+        return hinted < 400 ? { ...idle, hint: jumpHint } : perfectInput('JUMP', g);
       },
       8000,
     );
@@ -137,7 +146,7 @@ describe('game engine', () => {
     play(
       game,
       (g) => {
-        if (g.expected !== 'JUMP' || !g.activeItem) return perfectInput(g.expected);
+        if (g.expected !== 'JUMP' || !g.activeItem) return perfectInput(g.expected, g);
         jumpedAt ??= g.time;
         return { ...idle, jumpHeld: g.time - jumpedAt < 50 };
       },
@@ -153,7 +162,7 @@ describe('session stats', () => {
   it('computes real accuracy, strongest move and top mistakes', () => {
     const game = new GameEngine();
     // Never ducks, does everything else perfectly.
-    play(game, (g) => (g.expected === 'CROUCH' ? idle : perfectInput(g.expected)));
+    play(game, (g) => (g.expected === 'CROUCH' ? idle : perfectInput(g.expected, g)));
     const stats = computeSessionStats(game.result());
     const crouch = stats.perMove.find((m) => m.motion === 'CROUCH');
     expect(crouch?.accuracy).toBe(0);
@@ -182,7 +191,7 @@ describe('game modes and power-ups', () => {
 
   it('a boost doubles the points while it lasts', () => {
     const game = new GameEngine([item(0, 'BOOST', 1000), item(1, 'HURDLE', 3000)]);
-    const events = play(game, (g) => perfectInput(g.expected));
+    const events = play(game, (g) => perfectInput(g.expected, g));
     const clear = events.find((e) => e.type === 'clear');
     expect(clear?.type === 'clear' && clear.multiplier).toBe(GAME_CONFIG.powerUps.boostMultiplier);
   });
@@ -213,9 +222,32 @@ describe('game modes and power-ups', () => {
     // A pickup may sit half a gap after the last obstacle.
     expect(duration('sprint')).toBeLessThan((COURSES.sprint.phases[0]?.untilMs ?? 0) + 1000);
     expect(duration('endless')).toBeGreaterThan(5 * 60_000);
-    expect(courseForMode(getMode('classic'))).toEqual(generateCourse());
+    // A new course every run (random seed), the same course for everyone on a given day.
+    expect(courseForMode(getMode('classic'))).not.toEqual(courseForMode(getMode('classic')));
+    expect(courseForMode(getMode('daily'))).toEqual(courseForMode(getMode('daily')));
     expect(courseForMode(getMode('duel'), 7)).toEqual(courseForMode(getMode('duel'), 7));
     expect(courseForMode(getMode('duel'), 7)).not.toEqual(courseForMode(getMode('duel'), 8));
+  });
+
+  it('a jump is one take-off: holding the pose does not keep the runner in the air', () => {
+    const game = new GameEngine([item(0, 'HURDLE', 4000)]);
+    // Arms up / tiptoe held for the whole run, starting long before the barrier.
+    const events = play(game, (g) => ({ ...idle, jumpHeld: g.phase === 'running' }));
+    expect(events.filter((e) => e.type === 'jump')).toHaveLength(1);
+    // Landed long before the barrier arrived.
+    expect(game.result().obstacles[0]?.result).toBe('miss');
+  });
+
+  it('a new jump needs a landing first', () => {
+    const game = new GameEngine([item(0, 'HURDLE', 6000)]);
+    let t = 0;
+    // Toggle the jump pose every 100 ms: only one take-off per airtime.
+    play(game, (g) => {
+      if (g.phase !== 'running') return idle;
+      t += DT;
+      return { ...idle, jumpHeld: Math.floor(t / 100) % 2 === 0 && t < 600 };
+    });
+    expect(game.result().gesturesDetected).toBe(1);
   });
 
   it('the daily seed changes at midnight Astana time', () => {

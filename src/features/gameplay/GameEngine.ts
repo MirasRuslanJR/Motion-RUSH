@@ -276,7 +276,10 @@ export class GameEngine {
     const t = this.time;
 
     // Player state (edges count as detected gestures).
-    if (input.jumpHeld && !this.prevJumpHeld) {
+    // A jump is one take-off with a fixed flight time: holding the pose (arms up, staying
+    // on tiptoe) does NOT keep the runner in the air, and a new jump needs a landing first.
+    const landed = t - this.jumpStartedAt > this.cfg.airtimeMs;
+    if (input.jumpHeld && !this.prevJumpHeld && landed) {
       this.jumpStartedAt = t;
       this.gesturesDetected++;
       events.push({ type: 'jump' });
@@ -287,7 +290,7 @@ export class GameEngine {
     this.prevJumpHeld = input.jumpHeld;
     this.prevCrouchHeld = input.crouchHeld;
     this.lane = input.lane;
-    this.airborne = input.jumpHeld || t - this.jumpStartedAt <= this.cfg.airtimeMs;
+    this.airborne = t - this.jumpStartedAt <= this.cfg.airtimeMs;
     this.ducking = input.crouchHeld || t - this.lastCrouchEndAt <= this.cfg.duckGraceMs;
 
     this.updateOrbs(t, events);

@@ -6,7 +6,8 @@ import { classifyCameraError, type CameraErrorKind } from '../features/camera/ca
 import { MotionEngine } from '../features/engine/MotionEngine';
 import type { SessionResult } from '../features/gameplay/types';
 import { getMode, type GameModeId } from '../features/modes/modes';
-import { DuelRoom, newRoomCode } from '../features/online/DuelRoom';
+import { DuelRoom, newRoomCode, normalizeRoomCode } from '../features/online/DuelRoom';
+import { ONLINE_ENABLED } from '../lib/supabase';
 import { loadPoseBackend } from '../features/tracking/poseBackend';
 import { computeSessionStats } from '../features/results/sessionStats';
 import { useMotionUi } from '../hooks/useEngine';
@@ -48,6 +49,9 @@ export function App() {
   const [recorded, setRecorded] = useState<RecordedSession | null>(null);
   const [room, setRoom] = useState<DuelRoom | null>(null);
   const roomRef = useRef<DuelRoom | null>(null);
+  /** Invite link: ?room=CODE opens the duel lobby with that code once the camera is set up. */
+  const [inviteCode] = useState(() => normalizeRoomCode(new URLSearchParams(location.search).get('room') ?? ''));
+  const inviteUsed = useRef(false);
 
   const replaceRoom = useCallback((next: DuelRoom | null) => {
     void roomRef.current?.leave();
@@ -60,6 +64,13 @@ export function App() {
   useEffect(() => {
     if (roomRef.current && (flow.mode !== 'duel' || !ROOM_PHASES.includes(flow.phase))) replaceRoom(null);
   }, [flow.mode, flow.phase, replaceRoom]);
+
+  // An invited player lands in the duel lobby right after setup (a nickname is required first).
+  useEffect(() => {
+    if (inviteUsed.current || flow.phase !== 'modes' || inviteCode.length !== 4 || !ONLINE_ENABLED || profile.nickname.length < 2) return;
+    inviteUsed.current = true;
+    dispatch({ type: 'SELECT_MODE', mode: 'duel' });
+  }, [flow.phase, inviteCode, profile.nickname]);
 
   // Preload the pose model while the player reads the landing screen.
   useEffect(() => {
@@ -210,6 +221,7 @@ export function App() {
           <DuelLobbyScreen
             engine={engine}
             room={room}
+            initialCode={inviteCode}
             onCreate={onCreateRoom}
             onJoin={openRoom}
             onLeave={onLeaveRoom}

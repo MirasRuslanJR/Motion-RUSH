@@ -37,81 +37,161 @@
 .modes__main {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
   min-width: 0;
 }
 
-.modes__main .t-headline {
-  font-size: clamp(30px, 4vw, 52px);
+/* ── Carousel ── */
+.carousel {
+  --card-w: min(340px, 74vw);
+  --gap: 18px;
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
-.modes__tagline {
-  color: var(--text-2);
-  font-size: 17px;
-  min-height: 1.5em;
+.carousel__viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding: 18px 0 22px;
+  touch-action: pan-y;
+  cursor: grab;
+  user-select: none;
+  mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
 }
 
-.modes__grid {
+.carousel__viewport.is-dragging {
+  cursor: grabbing;
+}
+
+.carousel__track {
+  display: flex;
+  gap: var(--gap);
+  width: max-content;
+  transform: translateX(calc(50cqw - var(--card-w) / 2 - var(--i) * (var(--card-w) + var(--gap)) + var(--drag)));
+  transition: transform 0.45s cubic-bezier(0.2, 0.9, 0.25, 1.05);
+}
+
+.carousel__viewport {
+  container-type: inline-size;
+}
+
+.is-dragging .carousel__track {
+  transition: none;
+}
+
+.carousel__arrow {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 10px;
-  margin-top: 8px;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  z-index: 1;
+}
+
+.carousel__arrow:hover {
+  border-color: var(--cyan);
+}
+
+.carousel__dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.carousel__dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  transition:
+    width 0.3s,
+    background 0.3s;
+}
+
+.carousel__dots span.is-active {
+  width: 22px;
+  background: var(--accent);
 }
 
 .mode-card {
   --accent: var(--cyan);
-  display: grid;
-  gap: 4px;
-  text-align: left;
-  padding: 16px;
-  min-height: 118px;
-  border-radius: var(--radius-m);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  cursor: pointer;
-  transition:
-    border-color 0.2s,
-    background 0.2s;
   position: relative;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  width: var(--card-w);
+  min-height: 250px;
+  padding: 24px 22px 20px;
+  border-radius: var(--radius-l);
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%),
+    var(--surface);
+  text-align: left;
   overflow: hidden;
+  opacity: 0.45;
+  transform: scale(0.88);
+  transition:
+    transform 0.45s cubic-bezier(0.2, 0.9, 0.25, 1.05),
+    opacity 0.3s,
+    border-color 0.3s,
+    box-shadow 0.3s;
 }
 
-.mode-card::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--accent);
-  opacity: 0.5;
-}
-
-.mode-card:hover {
-  border-color: var(--line-strong);
+.mode-card.is-far {
+  opacity: 0.15;
 }
 
 .mode-card.is-selected {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
-.mode-card.is-selected::before {
   opacity: 1;
+  transform: scale(1);
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent),
+    0 18px 60px -20px color-mix(in srgb, var(--accent) 70%, transparent);
 }
 
-.mode-card.is-locked {
-  opacity: 0.55;
+.mode-card.is-locked.is-selected {
+  border-color: var(--line-strong);
+  box-shadow: none;
+}
+
+.mode-card__badge {
+  justify-self: start;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .mode-card__title {
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 16px;
-  letter-spacing: -0.01em;
+  font-weight: 800;
+  font-size: clamp(24px, 3vw, 32px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.mode-card__tagline {
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 1.4;
 }
 
 .mode-card__goal {
+  margin-top: auto;
   font-weight: 700;
   font-size: 14px;
   color: var(--accent);
@@ -120,7 +200,6 @@
 .mode-card__meta {
   font-size: 12px;
   color: var(--text-2);
-  margin-top: auto;
 }
 
 .mode-card__meta strong {
@@ -128,7 +207,8 @@
 }
 
 .modes__start {
-  margin-top: 14px;
+  display: flex;
+  justify-content: center;
   min-height: 80px;
 }
 
@@ -144,25 +224,14 @@
   .modes__side {
     order: 2;
   }
-  /* Phones: the start control goes above a compact two-column grid. */
-  .modes__start {
-    order: 1;
-    margin-top: 4px;
-    min-height: 0;
-  }
-  .modes__grid {
-    order: 2;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+  .carousel__arrow {
+    display: none;
   }
   .mode-card {
+    min-height: 210px;
+    padding: 20px 18px 16px;
+  }
+  .modes__start {
     min-height: 0;
-    padding: 12px 12px 12px 14px;
-  }
-  .mode-card__title {
-    font-size: 14px;
-  }
-  .mode-card__goal {
-    font-size: 12px;
   }
 }
