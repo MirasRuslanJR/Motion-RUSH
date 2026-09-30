@@ -6,10 +6,10 @@
   gap: 12px;
   padding: 16px 18px;
   border-radius: var(--radius-m);
-  background: rgba(8, 10, 18, 0.82);
+  /* Opaque instead of backdrop-filter: blur over a 60 fps canvas is re-rendered every frame. */
+  background: rgba(8, 10, 18, 0.93);
   border: 1px solid var(--line);
   border-left: 3px solid var(--tone);
-  backdrop-filter: blur(10px);
   transition:
     border-color 0.25s,
     background 0.25s;

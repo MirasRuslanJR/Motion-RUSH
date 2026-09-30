@@ -25,19 +25,21 @@
   height: 100%;
   object-fit: cover;
   transform: scaleX(-1);
-  filter: saturate(0.75) brightness(0.8) contrast(1.05);
   z-index: 0;
 }
 
-/* Dim + tint the feed so the skeleton reads first. */
+/*
+ * Dim + tint the feed so the skeleton reads first. A static overlay instead of a
+ * CSS filter on <video>: filters re-composite every camera frame on weak GPUs.
+ */
 .viewport__media::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 1;
   background:
-    radial-gradient(120% 90% at 50% 40%, transparent 40%, rgba(5, 6, 11, 0.7) 100%),
-    linear-gradient(rgba(10, 8, 30, 0.25), rgba(5, 6, 11, 0.35));
+    radial-gradient(120% 90% at 50% 40%, transparent 40%, rgba(5, 6, 11, 0.72) 100%),
+    linear-gradient(rgba(12, 10, 32, 0.4), rgba(5, 6, 11, 0.5));
   pointer-events: none;
 }
 
@@ -83,8 +85,7 @@
   gap: 8px;
   padding: 5px 10px;
   border-radius: 8px;
-  background: rgba(5, 6, 11, 0.6);
-  backdrop-filter: blur(6px);
+  background: rgba(5, 6, 11, 0.8);
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
@@ -141,13 +142,12 @@
   gap: 8px;
   padding: 10px 16px;
   border-radius: 12px;
-  background: rgba(255, 90, 61, 0.18);
+  background: rgba(58, 16, 12, 0.92);
   border: 1px solid rgba(255, 90, 61, 0.6);
   color: #ffd9d0;
   font-weight: 700;
   font-size: 14px;
   white-space: nowrap;
-  backdrop-filter: blur(8px);
 }
 
 .viewport--pip {
