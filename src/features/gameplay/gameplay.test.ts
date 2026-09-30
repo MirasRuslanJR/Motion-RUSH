@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { GAME_CONFIG } from '../../config/game.config';
+import { COURSES, GAME_CONFIG } from '../../config/game.config';
 import type { ExpectedMotion } from '../gestures/types';
 import { computeSessionStats } from '../results/sessionStats';
-import { generateCourse } from './course';
+import { getMode, courseForMode, rulesForMode } from '../modes/modes';
+import { dailySeed, generateCourse } from './course';
 import { GameEngine, type GameEvent, type PlayerInput } from './GameEngine';
-import type { Lane } from './types';
+import { isPickup, type CourseItem, type Lane } from './types';
 
 const DT = 16;
 const idle: PlayerInput = {
@@ -36,7 +37,7 @@ describe('course generation', () => {
 
   it('introduces every move first, then mixes, with sane spacing', () => {
     const course = generateCourse();
-    const required = course.filter((c) => c.kind !== 'ORB');
+    const required = course.filter((c) => !isPickup(c.kind));
     expect(required.slice(0, 4).map((c) => c.kind)).toEqual([...GAME_CONFIG.course.intro]);
     expect(required.length).toBeGreaterThan(20);
     for (let i = 1; i < required.length; i++) {
@@ -76,11 +77,13 @@ describe('game engine', () => {
 
   it('an idle player runs out of energy with concrete miss reasons', () => {
     const game = new GameEngine();
-    play(game, () => idle);
+    const events = play(game, () => idle);
     const result = game.result();
     expect(result.outcome).toBe('out-of-energy');
     const misses = result.obstacles.filter((o) => o.result === 'miss');
-    expect(misses).toHaveLength(GAME_CONFIG.energy);
+    // A shield picked up in the middle lane absorbs one miss each.
+    const absorbed = events.filter((e) => e.type === 'shield-used').length;
+    expect(misses.length - absorbed).toBe(GAME_CONFIG.energy);
     expect(misses[0]?.missReason?.ruleId).toBe('NO_ATTEMPT');
     expect(misses[0]?.missReason?.message).toContain('наклони корпус влево');
   });
@@ -161,5 +164,64 @@ describe('session stats', () => {
     // The bot switches pose as soon as a new obstacle becomes active → it is in position well before arrival.
     expect(stats.avgLeadMs).toBeGreaterThan(GAME_CONFIG.perfectLeadMs);
     expect(stats.perfect).toBe(stats.cleared);
+  });
+});
+
+describe('game modes and power-ups', () => {
+  const item = (id: number, kind: CourseItem['kind'], arriveAt: number, lane: Lane = 0): CourseItem => ({ id, kind, arriveAt, leadMs: 2000, lane });
+
+  it('a shield absorbs exactly one miss', () => {
+    const game = new GameEngine([item(0, 'SHIELD', 1000), item(1, 'HURDLE', 3000), item(2, 'HURDLE', 5000)]);
+    const events = play(game, () => idle);
+    expect(events.filter((e) => e.type === 'powerup')).toHaveLength(1);
+    expect(events.filter((e) => e.type === 'shield-used')).toHaveLength(1);
+    expect(game.result().obstacles.filter((o) => o.result === 'miss')).toHaveLength(2);
+    expect(game.energy).toBe(GAME_CONFIG.energy - 1);
+    expect(game.shield).toBe(false);
+  });
+
+  it('a boost doubles the points while it lasts', () => {
+    const game = new GameEngine([item(0, 'BOOST', 1000), item(1, 'HURDLE', 3000)]);
+    const events = play(game, (g) => perfectInput(g.expected));
+    const clear = events.find((e) => e.type === 'clear');
+    expect(clear?.type === 'clear' && clear.multiplier).toBe(GAME_CONFIG.powerUps.boostMultiplier);
+  });
+
+  it('practice never costs energy and hardcore ends on the first miss', () => {
+    const practice = getMode('practice');
+    const soft = new GameEngine(courseForMode(practice), undefined, rulesForMode(practice, 'body'));
+    play(soft, () => idle);
+    expect(soft.result().outcome).toBe('complete');
+    expect(soft.energy).toBe(practice.energy);
+
+    const hardcore = getMode('hardcore');
+    const hard = new GameEngine(courseForMode(hardcore), undefined, rulesForMode(hardcore, 'body'));
+    const events = play(hard, () => idle);
+    const result = hard.result();
+    expect(result.outcome).toBe('out-of-energy');
+    expect(result.mode).toBe('hardcore');
+    expect(result.scheme).toBe('body');
+    const absorbed = events.filter((e) => e.type === 'shield-used').length;
+    expect(result.obstacles.filter((o) => o.result === 'miss').length - absorbed).toBe(1);
+  });
+
+  it('each mode builds its own course', () => {
+    const duration = (id: string) => {
+      const course = courseForMode(getMode(id));
+      return course[course.length - 1]?.arriveAt ?? 0;
+    };
+    // A pickup may sit half a gap after the last obstacle.
+    expect(duration('sprint')).toBeLessThan((COURSES.sprint.phases[0]?.untilMs ?? 0) + 1000);
+    expect(duration('endless')).toBeGreaterThan(5 * 60_000);
+    expect(courseForMode(getMode('classic'))).toEqual(generateCourse());
+    expect(courseForMode(getMode('duel'), 7)).toEqual(courseForMode(getMode('duel'), 7));
+    expect(courseForMode(getMode('duel'), 7)).not.toEqual(courseForMode(getMode('duel'), 8));
+  });
+
+  it('the daily seed changes at midnight Astana time', () => {
+    const morning = dailySeed(new Date('2026-09-30T03:00:00Z'));
+    expect(dailySeed(new Date('2026-09-30T18:00:00Z'))).toBe(morning);
+    // 19:00 UTC = 00:00 next day in Astana (UTC+5).
+    expect(dailySeed(new Date('2026-09-30T19:30:00Z'))).not.toBe(morning);
   });
 });

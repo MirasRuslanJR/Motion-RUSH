@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { lerp } from '../lib/math/geometry';
 import { prefersReducedMotion } from '../lib/env';
-import type { ExpectedMotion } from '../features/gestures/types';
+import type { ControlScheme, ExpectedMotion } from '../features/gestures/types';
 import { observeCanvas } from '../features/render/canvas';
 import { drawSkeleton, MotionTrail, type Projector } from '../features/render/skeletonRenderer';
 import { createPose, LM } from '../features/tracking/landmarks';
@@ -9,11 +9,19 @@ import { buildSyntheticPose, type SyntheticPoseParams } from '../features/tracki
 
 type Move = Exclude<ExpectedMotion, 'CENTER'>;
 
-const TARGET: Record<Move, Partial<SyntheticPoseParams>> = {
-  LEAN_LEFT: { leanDeg: -24 },
-  LEAN_RIGHT: { leanDeg: 24 },
-  JUMP: { leftArm: 1, rightArm: 1 },
-  CROUCH: { crouch: 0.75 },
+const TARGETS: Record<ControlScheme, Record<Move, Partial<SyntheticPoseParams>>> = {
+  body: {
+    LEAN_LEFT: { shift: -1 },
+    LEAN_RIGHT: { shift: 1 },
+    JUMP: { rise: 0.7, leftArm: 0.3, rightArm: 0.3 },
+    CROUCH: { crouch: 0.85 },
+  },
+  seated: {
+    LEAN_LEFT: { leanDeg: -24 },
+    LEAN_RIGHT: { leanDeg: 24 },
+    JUMP: { leftArm: 1, rightArm: 1 },
+    CROUCH: { crouch: 0.75 },
+  },
 };
 
 const CYCLE: Move[] = ['LEAN_LEFT', 'LEAN_RIGHT', 'JUMP', 'CROUCH'];
@@ -38,13 +46,15 @@ function envelope(phase: number): number {
 interface DemoFigureProps {
   /** A single move to loop, or 'cycle' through all four. */
   move: Move | 'cycle';
+  /** Which control scheme to demonstrate (steps / real jump vs lean / arms up). */
+  scheme?: ControlScheme;
   className?: string;
   onMoveChange?: (move: Move) => void;
   label?: string;
 }
 
 /** Animated synthetic skeleton that demonstrates a move (landing / tutorial). */
-export function DemoFigure({ move, className, onMoveChange, label }: DemoFigureProps) {
+export function DemoFigure({ move, scheme = 'body', className, onMoveChange, label }: DemoFigureProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const onMoveRef = useRef(onMoveChange);
   useEffect(() => {
@@ -74,7 +84,7 @@ export function DemoFigure({ move, className, onMoveChange, label }: DemoFigureP
         onMoveRef.current?.(current);
       }
       const amount = reduced ? 1 : envelope((elapsed % STEP_MS) / STEP_MS);
-      buildSyntheticPose({ cx: 0.5, cy: 0.36, sw: 0.14, ...blend(TARGET[current], amount) }, pose);
+      buildSyntheticPose({ cx: 0.5, cy: 0.36, sw: 0.14, ...blend(TARGETS[scheme][current], amount) }, pose);
 
       const unit = Math.min(width, height);
       const ox = (width - unit) / 2;
@@ -97,7 +107,7 @@ export function DemoFigure({ move, className, onMoveChange, label }: DemoFigureP
       cancelAnimationFrame(raf);
       sizing.dispose();
     };
-  }, [move]);
+  }, [move, scheme]);
 
   return <canvas ref={canvasRef} className={className} role="img" aria-label={label ?? 'Анимация движения'} />;
 }

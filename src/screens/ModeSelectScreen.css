@@ -1,0 +1,168 @@
+.modes {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: clamp(16px, 3vw, 40px);
+  padding: 8px var(--gutter) var(--gutter);
+  max-width: 1320px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.modes__side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modes__camera.viewport--pip {
+  width: 100%;
+}
+
+.modes__howto {
+  display: grid;
+  gap: 8px;
+  margin: -6px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.modes__howto li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.modes__main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.modes__main .t-headline {
+  font-size: clamp(30px, 4vw, 52px);
+}
+
+.modes__tagline {
+  color: var(--text-2);
+  font-size: 17px;
+  min-height: 1.5em;
+}
+
+.modes__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.mode-card {
+  --accent: var(--cyan);
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 16px;
+  min-height: 118px;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.mode-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+.mode-card:hover {
+  border-color: var(--line-strong);
+}
+
+.mode-card.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.mode-card.is-selected::before {
+  opacity: 1;
+}
+
+.mode-card.is-locked {
+  opacity: 0.55;
+}
+
+.mode-card__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.mode-card__goal {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--accent);
+}
+
+.mode-card__meta {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: auto;
+}
+
+.mode-card__meta strong {
+  color: var(--text);
+}
+
+.modes__start {
+  margin-top: 14px;
+  min-height: 80px;
+}
+
+.modes__blocked {
+  font-weight: 700;
+  color: var(--warn);
+}
+
+@media (max-width: 800px) {
+  .modes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .modes__side {
+    order: 2;
+  }
+  /* Phones: the start control goes above a compact two-column grid. */
+  .modes__start {
+    order: 1;
+    margin-top: 4px;
+    min-height: 0;
+  }
+  .modes__grid {
+    order: 2;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .mode-card {
+    min-height: 0;
+    padding: 12px 12px 12px 14px;
+  }
+  .mode-card__title {
+    font-size: 14px;
+  }
+  .mode-card__goal {
+    font-size: 12px;
+  }
+}

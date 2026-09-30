@@ -7,6 +7,8 @@ export const PALETTE = {
   success: '#3dffb0',
   error: '#ff5a3d',
   warn: '#ffc14d',
+  /** Online opponent. */
+  pink: '#ff5ad1',
 } as const;
 
 export function rgba(hex: string, alpha: number): string {

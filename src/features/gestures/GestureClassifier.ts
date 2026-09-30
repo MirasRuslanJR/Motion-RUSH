@@ -1,8 +1,8 @@
 import { clamp } from '../../lib/math/geometry';
 import type { BodyMode } from './calibration';
 import type { BodyFeatures } from './FeatureExtractor';
-import { gestureMetric, progressOf, thresholdsFor, type GestureThresholds } from './thresholds';
-import { GESTURE_CHANNEL, GESTURE_PRIORITY, GESTURE_TYPES, type GestureChannel, type GestureType } from './types';
+import { gestureMetric, isFastGesture, progressOf, thresholdsFor, type GestureThresholds } from './thresholds';
+import { GESTURE_CHANNEL, GESTURE_PRIORITY, GESTURE_TYPES, schemeOf, type GestureChannel, type GestureType } from './types';
 
 export interface GestureReading {
   type: GestureType;
@@ -18,6 +18,8 @@ export interface GestureReading {
   held: boolean;
   /** Landmark visibility × margin over the threshold, 0..1. */
   confidence: number;
+  /** Confirm on the first clear frame (short-lived gestures like a real jump). */
+  fast: boolean;
 }
 
 export interface Classification {
@@ -26,7 +28,11 @@ export interface Classification {
   candidates: Record<GestureChannel, GestureType | null>;
 }
 
-function visibilityFor(type: GestureType, f: BodyFeatures): number {
+function visibilityFor(type: GestureType, f: BodyFeatures, mode: BodyMode | null): number {
+  if (schemeOf(mode) === 'body') {
+    // Whole-body gestures are read from the hips (fall back to shoulders if hips flicker out).
+    return f.hipCenter ? Math.min(f.visibility.hips, f.visibility.shoulders) : f.visibility.shoulders;
+  }
   switch (type) {
     case 'LEAN_LEFT':
     case 'LEAN_RIGHT':
@@ -40,7 +46,7 @@ function visibilityFor(type: GestureType, f: BodyFeatures): number {
 
 function read(type: GestureType, f: BodyFeatures, mode: BodyMode | null): GestureReading {
   const thresholds = thresholdsFor(type, mode);
-  const metric = gestureMetric(type, f);
+  const metric = gestureMetric(type, f, mode);
   const margin = clamp(0.55 + (0.45 * (metric - thresholds.release)) / (thresholds.activation - thresholds.release), 0, 1);
   return {
     type,
@@ -50,7 +56,8 @@ function read(type: GestureType, f: BodyFeatures, mode: BodyMode | null): Gestur
     attempting: metric >= thresholds.near,
     active: metric >= thresholds.activation,
     held: metric >= thresholds.release,
-    confidence: clamp(visibilityFor(type, f), 0, 1) * margin,
+    confidence: clamp(visibilityFor(type, f, mode), 0, 1) * margin,
+    fast: isFastGesture(type, mode),
   };
 }
 

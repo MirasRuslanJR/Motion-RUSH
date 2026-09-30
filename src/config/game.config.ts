@@ -46,6 +46,14 @@ export const GAME_CONFIG = {
     maxMultiplier: 4,
   },
 
+  /** Power-ups: a shield absorbs one miss, a boost doubles points for a while. */
+  powerUps: {
+    /** Share of pickups that are power-ups instead of plain orbs. */
+    chance: 0.18,
+    boostMs: 8000,
+    boostMultiplier: 2,
+  },
+
   course: {
     firstArrivalMs: 3400,
     endPaddingMs: 1400,
@@ -73,3 +81,43 @@ export const GAME_CONFIG = {
     ] as readonly CoursePhase[],
   },
 } as const;
+
+export interface CourseConfig {
+  firstArrivalMs: number;
+  endPaddingMs: number;
+  intro: readonly ObstacleKind[];
+  crossoverPenaltyMs: number;
+  phases: readonly CoursePhase[];
+}
+
+const ALL: readonly ObstacleKind[] = ['GATE_LEFT', 'GATE_RIGHT', 'HURDLE', 'BEAM', 'GATE_CENTER'];
+const BASIC: readonly ObstacleKind[] = ['GATE_LEFT', 'GATE_RIGHT', 'HURDLE', 'BEAM'];
+
+/** Course presets used by the game modes. */
+export const COURSES = {
+  /** ~70 s, four difficulty phases. */
+  standard: GAME_CONFIG.course,
+  /** 30 s, dense from the start. */
+  sprint: {
+    ...GAME_CONFIG.course,
+    firstArrivalMs: 2600,
+    phases: [{ untilMs: 30000, gapMs: [1500, 1800], leadMs: 2000, kinds: ALL, orbChance: 0.4 }],
+  },
+  /** Keeps accelerating for 10 minutes — in practice, until the energy runs out. */
+  endless: {
+    ...GAME_CONFIG.course,
+    phases: [
+      ...GAME_CONFIG.course.phases,
+      { untilMs: 100000, gapMs: [1450, 1650], leadMs: 1800, kinds: ALL, orbChance: 0.3 },
+      { untilMs: 140000, gapMs: [1300, 1450], leadMs: 1650, kinds: ALL, orbChance: 0.3 },
+      { untilMs: 600000, gapMs: [1150, 1300], leadMs: 1500, kinds: ALL, orbChance: 0.25 },
+    ],
+  },
+  /** Slow and forgiving — for learning the moves. */
+  practice: {
+    ...GAME_CONFIG.course,
+    phases: [{ untilMs: 60000, gapMs: [3000, 3400], leadMs: 3000, kinds: BASIC, orbChance: 0.3 }],
+  },
+} satisfies Record<string, CourseConfig>;
+
+export type CourseKind = keyof typeof COURSES;

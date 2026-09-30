@@ -5,29 +5,36 @@ import { HintPanel } from '../../components/HintPanel';
 import { Icon } from '../../components/Icon';
 import { Ring } from '../../components/Ring';
 import { setRingProgress } from '../../components/ringProgress';
-import { GAME_CONFIG } from '../../config/game.config';
+import { COURSES } from '../../config/game.config';
 import type { MotionEngine, MotionFrame } from '../../features/engine/MotionEngine';
 import type { Diagnosis } from '../../features/gestures/ErrorDiagnosisEngine';
-import { MOTION_META, type ExpectedMotion, type GestureType } from '../../features/gestures/types';
-import { generateCourse } from '../../features/gameplay/course';
+import { motionMeta, type ControlScheme, type ExpectedMotion, type GestureType } from '../../features/gestures/types';
 import { GameEngine, type GameEvent, type PlayerInput } from '../../features/gameplay/GameEngine';
-import { OBSTACLE_REQUIREMENT, type GameOutcome, type Lane, type SessionResult } from '../../features/gameplay/types';
+import { isPickup, OBSTACLE_REQUIREMENT, type GameOutcome, type Lane, type SessionResult } from '../../features/gameplay/types';
+import { courseForMode, rulesForMode, type GameModeDef } from '../../features/modes/modes';
+import { computeSessionStats } from '../../features/results/sessionStats';
+import type { DuelRoom } from '../../features/online/DuelRoom';
 import { GameRenderer } from '../../features/render/GameRenderer';
 import { useEngineFrame, useMotionUi } from '../../hooks/useEngine';
 import { sfx } from '../../lib/audio/sfx';
 import { clamp } from '../../lib/math/geometry';
+import { useStore } from '../../lib/store';
 import { RollingNumber } from './RollingNumber';
 import './GameScreen.css';
 
-const PHASE_NAMES = ['Warm-up', 'Flow', 'Rush', 'Challenge'];
+const PHASE_NAMES = ['Warm-up', 'Flow', 'Rush', 'Challenge', 'Frenzy', 'Overdrive', 'Insane'];
 const END_REVEAL_MS = 1600;
 const MISS_TOAST_MS = 2200;
+/** Live state is broadcast to the duel opponent at ~5 Hz. */
+const DUEL_SEND_MS = 200;
 
 interface HudState {
   score: number;
   combo: number;
   multiplier: number;
   energy: number;
+  shield: boolean;
+  boosted: boolean;
   phase: GameEngine['phase'];
   countdown: number | null;
   nextId: number | null;
@@ -35,18 +42,34 @@ interface HudState {
   outcome: GameOutcome | null;
 }
 
-function snapshot(game: GameEngine, outcome: GameOutcome | null): HudState {
+function stageOf(game: GameEngine, mode: GameModeDef): number {
+  const phases = COURSES[mode.course].phases;
+  const stage = phases.findIndex((p) => game.time < p.untilMs);
+  return stage < 0 ? phases.length - 1 : stage;
+}
+
+/** Progress bar: share of the course; in Endless — progress through the current speed stage. */
+function progressOf(game: GameEngine, mode: GameModeDef, stage: number): number {
+  if (mode.course !== 'endless') return clamp(game.time / game.duration, 0, 1);
+  const phases = COURSES.endless.phases;
+  const from = stage > 0 ? (phases[stage - 1]?.untilMs ?? 0) : 0;
+  const to = phases[stage]?.untilMs ?? game.duration;
+  return clamp((game.time - from) / (to - from), 0, 1);
+}
+
+function snapshot(game: GameEngine, mode: GameModeDef, outcome: GameOutcome | null): HudState {
   const next = game.nextRequired;
-  const stage = GAME_CONFIG.course.phases.findIndex((p) => game.time < p.untilMs);
   return {
     score: game.score,
     combo: game.combo,
     multiplier: game.multiplier,
     energy: game.energy,
+    shield: game.shield,
+    boosted: game.boosted,
     phase: game.phase,
     countdown: game.countdownValue,
     nextId: next?.id ?? null,
-    stage: stage < 0 ? PHASE_NAMES.length - 1 : stage,
+    stage: stageOf(game, mode),
     outcome,
   };
 }
@@ -87,6 +110,12 @@ function soundFor(event: GameEvent): void {
     case 'orb':
       sfx.play('orb');
       break;
+    case 'powerup':
+      sfx.play('powerup');
+      break;
+    case 'shield-used':
+      sfx.play('shield');
+      break;
     case 'combo':
       sfx.play('combo');
       break;
@@ -104,13 +133,13 @@ function soundFor(event: GameEvent): void {
 const LEGEND: GestureType[] = ['LEAN_LEFT', 'LEAN_RIGHT', 'JUMP', 'CROUCH'];
 
 /** Controls reminder: lights up the move the camera recognises right now. */
-function MoveLegend({ engine, next }: { engine: MotionEngine; next: ExpectedMotion | null }) {
+function MoveLegend({ engine, next, scheme }: { engine: MotionEngine; next: ExpectedMotion | null; scheme: ControlScheme }) {
   const lateral = useMotionUi(engine, (s) => s.lateral);
   const vertical = useMotionUi(engine, (s) => s.vertical);
   return (
     <ul className="legend" aria-label="Управление">
       {LEGEND.map((g) => {
-        const meta = MOTION_META[g];
+        const meta = motionMeta(g, scheme);
         const active = g === lateral || g === vertical;
         return (
           <li key={g} className={`${active ? 'is-active' : ''} ${g === next ? 'is-next' : ''}`}>
@@ -124,21 +153,48 @@ function MoveLegend({ engine, next }: { engine: MotionEngine; next: ExpectedMoti
   );
 }
 
+/** Duel: the opponent's live score and progress next to yours. */
+function OpponentPanel({ room, score }: { room: DuelRoom; score: number }) {
+  const opponent = useStore(room.ui, (s) => s.opponent);
+  const players = useStore(room.ui, (s) => s.players);
+  const left = !players.some((p) => p.id !== room.me.id);
+  const theirs = opponent?.score ?? 0;
+  const lead = score - theirs;
+  return (
+    <div className="duel-panel" role="status" aria-live="off">
+      <span className="t-label">vs {room.opponentName}</span>
+      <strong className="duel-panel__score">{theirs.toLocaleString('ru-RU')}</strong>
+      <div className="duel-panel__track">
+        <div className="duel-panel__fill" style={{ transform: `scaleX(${opponent?.progress ?? 0})` }} />
+      </div>
+      <span className={`duel-panel__lead ${lead >= 0 ? 'is-ahead' : 'is-behind'}`}>
+        {left ? 'соперник вышел' : opponent?.finished ? 'финишировал' : lead >= 0 ? `ты впереди на ${lead}` : `отстаёшь на ${-lead}`}
+      </span>
+    </div>
+  );
+}
+
 interface GameScreenProps {
   engine: MotionEngine;
+  mode: GameModeDef;
+  /** Course seed from the online room (duel). */
+  sharedSeed?: number | null;
+  duel?: DuelRoom | null;
   onFinish: (result: SessionResult) => void;
 }
 
 /** One run of the game. The parent re-mounts it (via `key`) for every new run. */
-export function GameScreen({ engine, onFinish }: GameScreenProps) {
-  const [game] = useState(() => new GameEngine(generateCourse()));
+export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFinish }: GameScreenProps) {
+  const [scheme] = useState<ControlScheme>(() => engine.ui.get().scheme);
+  const [game] = useState(() => new GameEngine(courseForMode(mode, sharedSeed ?? undefined), undefined, rulesForMode(mode, scheme)));
+  const lastSentRef = useRef(Number.NEGATIVE_INFINITY);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const backgroundRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<GameRenderer | null>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const resumeRef = useRef<SVGCircleElement>(null);
   const outcomeRef = useRef<GameOutcome | null>(null);
-  const [hud, setHud] = useState<HudState>(() => snapshot(game, null));
+  const [hud, setHud] = useState<HudState>(() => snapshot(game, mode, null));
   const hudRef = useRef(hud);
   /** Why the last obstacle was missed — shown briefly so every miss is explained. */
   const [missToast, setMissToast] = useState<{ id: number; message: string } | null>(null);
@@ -205,11 +261,33 @@ export function GameScreen({ engine, onFinish }: GameScreenProps) {
       if (event.type === 'end') outcomeRef.current = event.outcome;
       if (event.type === 'miss') setMissToast({ id: event.item.id, message: event.reason.message });
     }
+    const next = snapshot(game, mode, outcomeRef.current);
+    if (duel) {
+      const opp = duel.ui.get().opponent;
+      renderer?.setOpponent(opp && !opp.finished ? { name: duel.opponentName, lane: opp.lane, airborne: opp.airborne, ducking: opp.ducking } : null);
+      const finished = outcomeRef.current !== null;
+      if (lastSentRef.current !== Number.POSITIVE_INFINITY && (finished || frame.time - lastSentRef.current >= DUEL_SEND_MS)) {
+        // After the final state nothing more is sent from here (the results screen re-sends it).
+        lastSentRef.current = finished ? Number.POSITIVE_INFINITY : frame.time;
+        const r = finished ? computeSessionStats(game.result()) : null;
+        duel.sendState({
+          score: game.score,
+          combo: game.combo,
+          energy: game.energy,
+          progress: clamp(game.time / game.duration, 0, 1),
+          lane: game.lane,
+          airborne: game.airborne,
+          ducking: game.ducking,
+          finished,
+          outcome: outcomeRef.current,
+          accuracy: r ? r.accuracy : null,
+        });
+      }
+    }
     renderer?.render(game, frame, dt, frame.time);
-    if (progressRef.current) progressRef.current.style.transform = `scaleX(${clamp(game.time / game.duration, 0, 1)})`;
+    if (progressRef.current) progressRef.current.style.transform = `scaleX(${progressOf(game, mode, next.stage)})`;
     setRingProgress(resumeRef.current, game.resumeProgress);
 
-    const next = snapshot(game, outcomeRef.current);
     if (!sameHud(next, hudRef.current)) {
       hudRef.current = next;
       setHud(next);
@@ -217,8 +295,11 @@ export function GameScreen({ engine, onFinish }: GameScreenProps) {
   });
 
   const nextItem = game.nextRequired;
-  const nextMotion = nextItem && nextItem.kind !== 'ORB' ? OBSTACLE_REQUIREMENT[nextItem.kind] : null;
+  const nextMotion = nextItem && !isPickup(nextItem.kind) ? OBSTACLE_REQUIREMENT[nextItem.kind] : null;
+  const nextMeta = nextMotion ? motionMeta(nextMotion, scheme) : null;
   const playing = hud.phase === 'running';
+  const phases = COURSES[mode.course].phases;
+  const stageLabel = phases.length === 1 ? mode.goal : (PHASE_NAMES[hud.stage] ?? `Stage ${hud.stage + 1}`);
 
   return (
     <main className="screen game">
@@ -229,22 +310,33 @@ export function GameScreen({ engine, onFinish }: GameScreenProps) {
         <div className="hud">
           <div className="hud__top">
             <div className="hud__score">
-              <span className="t-label">Score</span>
+              <span className="t-label">{mode.title}</span>
               <RollingNumber value={hud.score} className="hud__score-value" />
-              {hud.multiplier > 1 && <span className="hud__multi">×{hud.multiplier}</span>}
+              {hud.multiplier > 1 && <span className={`hud__multi ${hud.boosted ? 'is-boost' : ''}`}>×{hud.multiplier}</span>}
             </div>
             <div className="hud__progress">
               <div className="hud__progress-track">
                 <div ref={progressRef} className="hud__progress-fill" />
               </div>
-              <span className="t-label">{PHASE_NAMES[hud.stage]}</span>
+              <span className="t-label">{stageLabel}</span>
             </div>
-            <div className="hud__energy" role="img" aria-label={`Энергия: ${hud.energy} из ${GAME_CONFIG.energy}`}>
-              {Array.from({ length: GAME_CONFIG.energy }, (_, i) => (
-                <span key={i} className={`hud__cell ${i < hud.energy ? 'is-full' : ''}`} />
-              ))}
+            <div className="hud__right">
+              {mode.practice ? (
+                <span className="t-label hud__practice">Без штрафов</span>
+              ) : (
+                <div className="hud__energy" role="img" aria-label={`Энергия: ${hud.energy} из ${mode.energy}`}>
+                  {Array.from({ length: mode.energy }, (_, i) => (
+                    <span key={i} className={`hud__cell ${i < hud.energy ? 'is-full' : ''}`} />
+                  ))}
+                </div>
+              )}
+              <div className="hud__powers">
+                {hud.shield && <span className="hud__power hud__power--shield">SHIELD</span>}
+                {hud.boosted && <span className="hud__power hud__power--boost">BOOST ×2</span>}
+              </div>
             </div>
           </div>
+          {duel && <OpponentPanel room={duel} score={hud.score} />}
 
           <AnimatePresence>
             {missToast && playing && (
@@ -280,12 +372,12 @@ export function GameScreen({ engine, onFinish }: GameScreenProps) {
           </AnimatePresence>
 
           <div className="hud__bottom">
-            {nextMotion && playing && (
+            {nextMeta && playing && (
               <div className="hud__cue" key={hud.nextId}>
                 <span className="t-label">Next</span>
-                {MOTION_META[nextMotion].arrow && <Icon name={MOTION_META[nextMotion].arrow} size={18} />}
-                <strong>{MOTION_META[nextMotion].title}</strong>
-                <span className="hud__cue-text">{MOTION_META[nextMotion].cue}</span>
+                {nextMeta.arrow && <Icon name={nextMeta.arrow} size={18} />}
+                <strong>{nextMeta.title}</strong>
+                <span className="hud__cue-text">{nextMeta.cue}</span>
               </div>
             )}
             <HintPanel engine={engine} variant="compact" />
@@ -346,7 +438,7 @@ export function GameScreen({ engine, onFinish }: GameScreenProps) {
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ type: 'spring', stiffness: 200, damping: 16, delay: 0.1 }}
               >
-                {hud.outcome === 'complete' ? 'Motion complete' : 'Out of energy'}
+                {hud.outcome === 'complete' ? 'Motion complete' : mode.energy === 1 ? 'Game over' : 'Out of energy'}
               </motion.h2>
             </motion.div>
           )}
@@ -360,7 +452,7 @@ export function GameScreen({ engine, onFinish }: GameScreenProps) {
             <Icon name="users" size={16} /> ONE PLAYER ONLY — оставь в кадре одного человека
           </div>
         )}
-        <MoveLegend engine={engine} next={playing ? nextMotion : null} />
+        <MoveLegend engine={engine} next={playing ? nextMotion : null} scheme={scheme} />
       </aside>
     </main>
   );

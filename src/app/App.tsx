@@ -5,6 +5,8 @@ import { TopBar } from '../components/TopBar';
 import { classifyCameraError, type CameraErrorKind } from '../features/camera/cameraErrors';
 import { MotionEngine } from '../features/engine/MotionEngine';
 import type { SessionResult } from '../features/gameplay/types';
+import { getMode, type GameModeId } from '../features/modes/modes';
+import { DuelRoom, newRoomCode } from '../features/online/DuelRoom';
 import { loadPoseBackend } from '../features/tracking/poseBackend';
 import { computeSessionStats } from '../features/results/sessionStats';
 import { useMotionUi } from '../hooks/useEngine';
@@ -14,12 +16,18 @@ import { loadProfile, recordSession, saveMuted, type Profile, type RecordedSessi
 import { CalibrationScreen } from '../screens/CalibrationScreen';
 import { CameraCheckScreen } from '../screens/CameraCheckScreen';
 import { CameraErrorScreen } from '../screens/CameraErrorScreen';
+import { DuelLobbyScreen } from '../screens/DuelLobbyScreen';
 import { GameScreen } from '../screens/game/GameScreen';
 import { LandingScreen } from '../screens/LandingScreen';
+import { LeaderboardScreen } from '../screens/LeaderboardScreen';
+import { ModeSelectScreen } from '../screens/ModeSelectScreen';
 import { PermissionScreen } from '../screens/PermissionScreen';
 import { ResultsScreen } from '../screens/results/ResultsScreen';
 import { TutorialScreen } from '../screens/TutorialScreen';
-import { flowReducer, INITIAL_FLOW } from './flow';
+import { flowReducer, INITIAL_FLOW, type Phase } from './flow';
+
+/** Phases during which an online room stays open. */
+const ROOM_PHASES: readonly Phase[] = ['lobby', 'game', 'results', 'leaderboard'];
 
 /** Routes runtime camera/model failures (e.g. camera unplugged mid-game) into the flow. */
 function EngineWatcher({ engine, onFail }: { engine: MotionEngine; onFail: (kind: CameraErrorKind) => void }) {
@@ -38,6 +46,20 @@ export function App() {
   const [profile, setProfile] = useState<Profile>(loadProfile);
   const [muted, setMuted] = useState(profile.muted);
   const [recorded, setRecorded] = useState<RecordedSession | null>(null);
+  const [room, setRoom] = useState<DuelRoom | null>(null);
+  const roomRef = useRef<DuelRoom | null>(null);
+
+  const replaceRoom = useCallback((next: DuelRoom | null) => {
+    void roomRef.current?.leave();
+    roomRef.current = next;
+    setRoom(next);
+    if (next) void next.connect();
+  }, []);
+
+  // Leaving the duel flow (menu, recalibration, home) closes the online room.
+  useEffect(() => {
+    if (roomRef.current && (flow.mode !== 'duel' || !ROOM_PHASES.includes(flow.phase))) replaceRoom(null);
+  }, [flow.mode, flow.phase, replaceRoom]);
 
   // Preload the pose model while the player reads the landing screen.
   useEffect(() => {
@@ -55,7 +77,10 @@ export function App() {
 
   // Release the camera when the page goes away.
   useEffect(() => {
-    const release = () => engineRef.current?.dispose();
+    const release = () => {
+      engineRef.current?.dispose();
+      void roomRef.current?.leave();
+    };
     window.addEventListener('pagehide', release);
     return () => window.removeEventListener('pagehide', release);
   }, []);
@@ -87,21 +112,44 @@ export function App() {
   const onTutorialDone = useCallback(() => dispatch({ type: 'TUTORIAL_DONE' }), []);
   const onPlayAgain = useCallback(() => {
     sfx.play('confirm');
+    void roomRef.current?.rematch();
     dispatch({ type: 'PLAY_AGAIN' });
   }, []);
   const onRecalibrate = useCallback(() => dispatch({ type: 'RECALIBRATE' }), []);
+  const onModes = useCallback(() => dispatch({ type: 'MODES' }), []);
+  const onLeaderboard = useCallback(() => dispatch({ type: 'LEADERBOARD' }), []);
+  const onBack = useCallback(() => dispatch({ type: 'BACK' }), []);
+  const onSelectMode = useCallback((mode: GameModeId) => dispatch({ type: 'SELECT_MODE', mode }), []);
+  const onDuelStart = useCallback((seed: number) => dispatch({ type: 'DUEL_START', seed }), []);
+
+  const openRoom = useCallback(
+    (code: string) => {
+      const me = loadProfile();
+      replaceRoom(new DuelRoom(code, { id: me.playerId, name: me.nickname, scheme: engineRef.current?.ui.get().scheme ?? 'body' }));
+    },
+    [replaceRoom],
+  );
+  const onCreateRoom = useCallback(() => openRoom(newRoomCode()), [openRoom]);
+  const onLeaveRoom = useCallback(() => {
+    if (roomRef.current) replaceRoom(null);
+    else dispatch({ type: 'MODES' });
+  }, [replaceRoom]);
 
   const onFinish = useCallback((result: SessionResult) => {
-    const stats = computeSessionStats(result);
-    const saved = recordSession({
-      score: result.score,
-      accuracy: stats.accuracy,
-      bestCombo: result.bestCombo,
-      outcome: result.outcome,
-      date: new Date().toISOString(),
-    });
-    setRecorded(saved);
-    setProfile(saved.profile);
+    if (getMode(result.mode).ranked) {
+      const stats = computeSessionStats(result);
+      const saved = recordSession(result.mode, {
+        score: result.score,
+        accuracy: stats.accuracy,
+        bestCombo: result.bestCombo,
+        outcome: result.outcome,
+        date: new Date().toISOString(),
+      });
+      setRecorded(saved);
+      setProfile(saved.profile);
+    } else {
+      setRecorded(null);
+    }
     dispatch({ type: 'GAME_OVER', result });
   }, []);
 
@@ -122,7 +170,10 @@ export function App() {
   let screen: ReactNode = null;
   switch (flow.phase) {
     case 'landing':
-      screen = <LandingScreen profile={profile} onStart={start} />;
+      screen = <LandingScreen profile={profile} onStart={start} onLeaderboard={onLeaderboard} />;
+      break;
+    case 'leaderboard':
+      screen = <LeaderboardScreen profile={profile} initialMode={flow.mode} onBack={onBack} />;
       break;
     case 'permission':
       screen = <PermissionScreen />;
@@ -139,8 +190,47 @@ export function App() {
     case 'tutorial':
       if (engine) screen = <TutorialScreen engine={engine} onDone={onTutorialDone} />;
       break;
+    case 'modes':
+      if (engine) {
+        screen = (
+          <ModeSelectScreen
+            engine={engine}
+            profile={profile}
+            initialMode={flow.mode}
+            onSelect={onSelectMode}
+            onLeaderboard={onLeaderboard}
+            onProfile={setProfile}
+          />
+        );
+      }
+      break;
+    case 'lobby':
+      if (engine) {
+        screen = (
+          <DuelLobbyScreen
+            engine={engine}
+            room={room}
+            onCreate={onCreateRoom}
+            onJoin={openRoom}
+            onLeave={onLeaveRoom}
+            onStart={onDuelStart}
+          />
+        );
+      }
+      break;
     case 'game':
-      if (engine) screen = <GameScreen key={flow.runId} engine={engine} onFinish={onFinish} />;
+      if (engine) {
+        screen = (
+          <GameScreen
+            key={flow.runId}
+            engine={engine}
+            mode={getMode(flow.mode)}
+            sharedSeed={flow.duelSeed}
+            duel={flow.mode === 'duel' ? room : null}
+            onFinish={onFinish}
+          />
+        );
+      }
       break;
     case 'results':
       if (engine && flow.result) {
@@ -148,9 +238,15 @@ export function App() {
           <ResultsScreen
             engine={engine}
             result={flow.result}
+            mode={getMode(flow.result.mode)}
             recorded={recorded}
+            profile={profile}
+            duel={flow.mode === 'duel' ? room : null}
+            onProfile={setProfile}
             onPlayAgain={onPlayAgain}
+            onModes={onModes}
             onRecalibrate={onRecalibrate}
+            onLeaderboard={onLeaderboard}
           />
         );
       }

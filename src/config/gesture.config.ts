@@ -6,6 +6,10 @@
  *   ARM = arm length (shoulder→elbow→wrist) captured during calibration
  * so the same numbers work for a child 1 m from the camera and an adult at 3 m.
  *
+ * Two control schemes, chosen automatically by calibration:
+ *   body   — hips visible (standing back): real steps, real jumps, real squats
+ *   seated — upper body only (at a desk): shoulder lean, arms up, duck
+ *
  * For each gesture:
  *   rest        metric value of a neutral standing pose (0% progress)
  *   near        metric above which we consider the user is TRYING (error mode kicks in)
@@ -13,6 +17,7 @@
  *   release     metric below which a recognised gesture ends (hysteresis: release < activation)
  */
 export const GESTURE_CONFIG = {
+  /** ── seated scheme ── */
   lean: {
     /** Metric: lateral shift of the shoulder centre, in SW (sign by direction). */
     rest: 0,
@@ -40,21 +45,49 @@ export const GESTURE_CONFIG = {
     elbowToWristFactor: 1.9,
   },
   crouch: {
-    /** Metric: how far the shoulder centre dropped below its standing height, in SW. */
+    /** Metric: how far the shoulder centre dropped below its sitting height, in SW. */
     rest: 0,
     near: 0.12,
-    activation: 0.4,
-    /** Seated / upper-body framing: ducking moves the shoulders less. */
-    activationUpperBody: 0.3,
-    release: 0.22,
-    releaseUpperBody: 0.17,
+    activation: 0.3,
+    release: 0.17,
     /** Nose dropped this much (SW) while shoulders did not → "only your head moves". */
     headOnlyNoseDrop: 0.3,
     /** Sideways drift (SW) during a crouch → "keep your torso centred". */
     maxLateralDrift: 0.34,
-    /** Full-body mode: hips must travel at least this share of the shoulder drop. */
-    minHipShare: 0.35,
   },
+
+  /** ── body scheme (full body visible) ── */
+  body: {
+    step: {
+      /** Metric: lateral shift of the HIP centre (the whole body moves), in SW. */
+      rest: 0,
+      near: 0.12,
+      activation: 0.4,
+      release: 0.24,
+      /** Shoulders moved this far while hips stayed → "only the upper body moves". */
+      shouldersOnlyShift: 0.3,
+    },
+    jump: {
+      /** Metric: how far hips AND shoulders rose above standing height, in SW. */
+      rest: 0,
+      near: 0.07,
+      activation: 0.2,
+      release: 0.1,
+      /** Hands this high (ARM) without a body rise → "arms don't count, jump". */
+      armsOnlyLift: 0.2,
+    },
+    squat: {
+      /** Metric: hip drop below standing height, in SW. */
+      rest: 0,
+      near: 0.1,
+      activation: 0.32,
+      release: 0.18,
+      /** Shoulders dropped this much (SW) while hips did not → bowing, not squatting. */
+      bowShoulderDrop: 0.28,
+      maxLateralDrift: 0.4,
+    },
+  },
+
   center: {
     /** |lateral shift| under this (SW) counts as centred. */
     tolerance: 0.2,
@@ -64,6 +97,9 @@ export const GESTURE_CONFIG = {
     stableFrames: 2,
     /** …and at least this long before it is confirmed. */
     stableMs: 70,
+    /** A real jump is airborne only ~300–400 ms: confirm it on the first clear frame. */
+    fastStableFrames: 1,
+    fastStableMs: 0,
     /** After a gesture ends, the same gesture cannot re-trigger for this long. */
     cooldownMs: 200,
     /** Minimum confidence to confirm a candidate. */

@@ -49,6 +49,47 @@
   justify-items: start;
 }
 
+.results__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.global-submit {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.duel-verdict {
+  display: grid;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 12px 16px;
+  border-radius: var(--radius-m);
+  border: 1px solid rgba(255, 90, 209, 0.5);
+  background: rgba(255, 90, 209, 0.08);
+}
+
+.duel-verdict__title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.1;
+}
+
+.duel-verdict--win .duel-verdict__title {
+  color: var(--success);
+}
+
+.duel-verdict--lose .duel-verdict__title {
+  color: var(--error);
+}
+
+.duel-verdict__scores {
+  color: var(--text-2);
+  font-size: 14px;
+}
+
 /* ── Stat tiles ── */
 .results__grid {
   display: grid;

@@ -112,7 +112,7 @@ export class GestureStateMachine {
       if (candidate === this.state.gesture) {
         this.state.frames += 1;
         const reading = c.readings[candidate];
-        const stable = this.state.frames >= this.cfg.stableFrames && t - this.state.since >= this.cfg.stableMs;
+        const stable = this.isStable(reading.fast, t);
         if (stable && reading.confidence >= this.cfg.requiredConfidence) {
           this.enter('CONFIRMED', candidate, t);
           events.push(this.event(candidate, 'start', reading.confidence, t, feats));
@@ -124,8 +124,19 @@ export class GestureStateMachine {
 
     // NEUTRAL (or a COOLDOWN that allows a different gesture)
     if (candidate && !this.blocked(candidate, t) && c.readings[candidate].confidence >= this.cfg.requiredConfidence) {
+      const reading = c.readings[candidate];
       this.enter('CANDIDATE', candidate, t);
+      if (reading.fast && this.isStable(true, t)) {
+        this.enter('CONFIRMED', candidate, t);
+        events.push(this.event(candidate, 'start', reading.confidence, t, feats));
+      }
     }
     return events;
+  }
+
+  private isStable(fast: boolean, t: number): boolean {
+    const frames = fast ? this.cfg.fastStableFrames : this.cfg.stableFrames;
+    const ms = fast ? this.cfg.fastStableMs : this.cfg.stableMs;
+    return this.state.frames >= frames && t - this.state.since >= ms;
   }
 }

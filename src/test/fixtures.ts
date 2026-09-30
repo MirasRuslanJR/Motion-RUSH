@@ -37,7 +37,26 @@ export function analyse(params: Partial<SyntheticPoseParams>, baseline: Baseline
   return { pose, f, c: classify(f, baseline.mode) };
 }
 
-/** Named synthetic landmark fixtures: correct, almost-correct and wrong executions. */
+/**
+ * Named synthetic landmark fixtures: correct, almost-correct and wrong executions.
+ * Seated-scheme fixtures are analysed with an upper-body baseline (calibrate(false)),
+ * body-scheme fixtures with a full-body baseline (calibrate(true)).
+ */
+export const BODY_FIXTURES = {
+  neutral: {},
+  validStepLeft: { shift: -0.7 },
+  validStepRight: { shift: 0.7 },
+  almostStepLeft: { shift: -0.25 },
+  shouldersOnlyLeft: { leanDeg: -22 },
+  validRealJump: { rise: 0.35 },
+  lowJump: { rise: 0.12 },
+  armsOnlyJump: { leftArm: 1, rightArm: 1 },
+  validSquat: { crouch: 0.5 },
+  almostSquat: { crouch: 0.2 },
+  bowInsteadOfSquat: { bow: 0.4 },
+  jumpWhileStepping: { shift: -0.7, rise: 0.35 },
+} satisfies Record<string, Partial<SyntheticPoseParams>>;
+
 export const FIXTURES = {
   neutral: {},
   validLeftLean: { leanDeg: -22 },
@@ -58,6 +77,6 @@ export const FIXTURES = {
   almostCrouch: { crouch: 0.22 },
   headOnlyCrouch: { headDrop: 0.4 },
   bowInsteadOfSquat: { bow: 0.3 },
-  crouchLeaning: { crouch: 0.25, leanDeg: -20 },
+  crouchLeaning: { crouch: 0.15, leanDeg: -20 },
   crouchWithArmsUp: { crouch: 0.55, leftArm: 1, rightArm: 1 },
 } satisfies Record<string, Partial<SyntheticPoseParams>>;

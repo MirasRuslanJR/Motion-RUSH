@@ -11,7 +11,7 @@ import { extractFeatures, type BodyFeatures } from '../gestures/FeatureExtractor
 import { classify, type Classification } from '../gestures/GestureClassifier';
 import { GestureStateMachine, type ChannelState } from '../gestures/GestureStateMachine';
 import { buildTargetPose } from '../gestures/targetPose';
-import type { ExpectedMotion, GestureEvent, GestureEventFeatures, GestureType } from '../gestures/types';
+import { schemeOf, type ControlScheme, type ExpectedMotion, type GestureEvent, type GestureEventFeatures, type GestureType } from '../gestures/types';
 import { assessFrame, isTrackable, NO_BODY_QUALITY, trackingMessage, type FrameQuality, type TrackingStatus } from '../tracking/frameQuality';
 import { normalizeLandmarks } from '../tracking/LandmarkNormalizer';
 import { copyPoseInto, createPose, type Pose } from '../tracking/landmarks';
@@ -29,6 +29,8 @@ export interface MotionUiState {
   delegate: Delegate | null;
   /** Where inference runs: a Web Worker (preferred) or the main thread. */
   backend: PoseBackend['kind'] | null;
+  /** Control scheme chosen by calibration: whole body (standing) or seated. */
+  scheme: ControlScheme;
   tracking: TrackingStatus;
   trackingMessage: string;
   lowLight: boolean;
@@ -77,6 +79,7 @@ const INITIAL_UI: MotionUiState = {
   model: 'loading',
   delegate: null,
   backend: null,
+  scheme: 'body',
   tracking: 'NO_BODY',
   trackingMessage: trackingMessage(NO_BODY_QUALITY),
   lowLight: false,
@@ -222,6 +225,7 @@ export class MotionEngine {
           hipCenter: baseline.hipCenter ? { ...baseline.hipCenter } : null,
         }
       : null;
+    if (baseline) this.ui.set({ scheme: schemeOf(baseline.mode) });
     this.emit([...this.lateralSM.reset(this.frame.time), ...this.verticalSM.reset(this.frame.time)]);
   }
 

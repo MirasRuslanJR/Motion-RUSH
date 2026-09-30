@@ -1,7 +1,7 @@
 import { clamp, lerp, midpoint, type Point } from '../../lib/math/geometry';
 import type { MotionFrame } from '../engine/MotionEngine';
 import type { GameEngine, GameEvent } from '../gameplay/GameEngine';
-import type { CourseItem } from '../gameplay/types';
+import { isPickup, type CourseItem } from '../gameplay/types';
 import { createPose, LM, lm, type Pose } from '../tracking/landmarks';
 import { buildSyntheticPose } from '../tracking/syntheticPose';
 import { observeCanvas, type CanvasSize } from './canvas';
@@ -54,6 +54,16 @@ const FLOATER_MS = 900;
 const TRAIL_POINTS = 4; // head, both hands, hips
 const TRAIL_CAPACITY = 12;
 const TRACK_EDGES = [-1.5, -0.5, 0.5, 1.5] as const;
+/** The online opponent runs slightly behind the player so both stay visible in one lane. */
+const GHOST_Z = 0.9;
+
+/** What the renderer needs to draw the online opponent. */
+export interface OpponentGhost {
+  name: string;
+  lane: number;
+  airborne: boolean;
+  ducking: boolean;
+}
 
 /**
  * Canvas renderer for the runner scene. Reads game + motion state, owns only
@@ -88,6 +98,11 @@ export class GameRenderer {
   private reducedMotion = false;
   /** Soft glow passes (off on the lowest quality level). */
   private glow = true;
+  private opponent: OpponentGhost | null = null;
+  private readonly ghostPose: Pose = createPose();
+  private ghostLane = 0;
+  private ghostJump = 0;
+  private ghostDuck = 0;
 
   constructor(canvas: HTMLCanvasElement, background: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d');
@@ -99,6 +114,11 @@ export class GameRenderer {
 
   setReducedMotion(reduced: boolean): void {
     this.reducedMotion = reduced;
+  }
+
+  /** Latest known state of the online opponent (null = solo run). */
+  setOpponent(opponent: OpponentGhost | null): void {
+    this.opponent = opponent;
   }
 
   dispose(): void {
@@ -150,12 +170,26 @@ export class GameRenderer {
         this.floaters.push({ text: 'MISS', sub: '', x: chest.x, y: chest.y - g.laneW * 0.9, born: now, color: PALETTE.error });
         break;
       case 'orb': {
+        this.itemFx.set(event.item.id, { status: 'clear', at: now });
         const x = this.laneX(g, event.item.lane, 0);
         const y = this.groundY(g, 0) - g.laneW * 0.5;
         this.particles.burst(x, y, PALETTE.cyan, 14, g.laneW * 1.6);
         this.floaters.push({ text: `+${event.points}`, sub: '', x, y: y - g.laneW * 0.3, born: now, color: PALETTE.cyan });
         break;
       }
+      case 'powerup': {
+        this.itemFx.set(event.item.id, { status: 'clear', at: now });
+        const x = this.laneX(g, event.item.lane, 0);
+        const y = this.groundY(g, 0) - g.laneW * 0.5;
+        const color = event.kind === 'SHIELD' ? PALETTE.success : PALETTE.warn;
+        this.particles.burst(x, y, color, 26, g.laneW * 2);
+        this.floaters.push({ text: event.kind === 'SHIELD' ? 'SHIELD' : '×2', sub: event.kind === 'SHIELD' ? 'защита от промаха' : 'BOOST', x, y: y - g.laneW * 0.3, born: now, color });
+        break;
+      }
+      case 'shield-used':
+        this.particles.burst(chest.x, chest.y, PALETTE.success, 24, g.laneW * 2.2);
+        this.floaters.push({ text: 'SHIELD', sub: 'энергия сохранена', x: chest.x, y: chest.y - g.laneW * 1.3, born: now, color: PALETTE.success });
+        break;
       case 'combo':
         this.comboRingAt = now;
         break;
@@ -183,6 +217,13 @@ export class GameRenderer {
     this.laneVisual = lerp(this.laneVisual, game.lane, k(75));
     this.jumpVisual = lerp(this.jumpVisual, game.airborne ? 1 : 0, k(game.airborne ? 70 : 130));
     this.duckVisual = lerp(this.duckVisual, game.ducking ? 1 : 0, k(60));
+    const opp = this.opponent;
+    if (opp) {
+      // Network updates arrive ~5×/s: ease between them.
+      this.ghostLane = lerp(this.ghostLane, opp.lane, k(140));
+      this.ghostJump = lerp(this.ghostJump, opp.airborne ? 1 : 0, k(opp.airborne ? 80 : 140));
+      this.ghostDuck = lerp(this.ghostDuck, opp.ducking ? 1 : 0, k(80));
+    }
     const lead = game.nextRequired?.leadMs ?? 2200;
     if (running) this.stripeOffset = (this.stripeOffset + (dtMs * Z_FAR) / lead) % 1.5;
     this.particles.update(dtMs);
@@ -206,6 +247,7 @@ export class GameRenderer {
       const z = this.itemZ(item, game.time);
       if (z > 0 && z <= Z_FAR) this.drawItem(ctx, g, item, z, now, item.id === nextId);
     }
+    if (opp) this.drawGhost(ctx, g, opp, game.time);
     this.drawRunner(ctx, g, game, frame, now, quality.trailLength);
     for (let i = course.length - 1; i >= 0; i--) {
       const item = course[i];
@@ -229,9 +271,9 @@ export class GameRenderer {
     }
   }
 
-  /** Collected orbs disappear; everything else stays visible while in range. */
+  /** Collected pickups disappear; everything else stays visible while in range. */
   private itemVisible(item: CourseItem): boolean {
-    return !(item.kind === 'ORB' && this.itemFx.has(item.id));
+    return !(isPickup(item.kind) && this.itemFx.has(item.id));
   }
 
   private drawBackground(size: CanvasSize): void {
@@ -413,7 +455,107 @@ export class GameRenderer {
         ctx.fill();
         break;
       }
+      case 'SHIELD':
+      case 'BOOST': {
+        const x = this.laneX(g, item.lane, z);
+        const y = baseY - unit * 0.55;
+        const r = unit * (0.17 + Math.sin(now / 200) * 0.015);
+        const color = item.kind === 'SHIELD' ? PALETTE.success : PALETTE.warn;
+        ctx.globalCompositeOperation = 'lighter';
+        if (this.glow) {
+          ctx.fillStyle = rgba(color, 0.18);
+          ctx.beginPath();
+          ctx.arc(x, y, r * 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.strokeStyle = color;
+        ctx.fillStyle = rgba(color, 0.25);
+        ctx.lineWidth = Math.max(1.5, r * 0.22);
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        if (item.kind === 'SHIELD') {
+          // Hexagon
+          for (let i = 0; i < 6; i++) {
+            const a = Math.PI / 6 + (i * Math.PI) / 3 + now / 900;
+            ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+          }
+        } else {
+          // Lightning bolt
+          ctx.moveTo(x + r * 0.25, y - r);
+          ctx.lineTo(x - r * 0.45, y + r * 0.12);
+          ctx.lineTo(x, y + r * 0.12);
+          ctx.lineTo(x - r * 0.25, y + r);
+          ctx.lineTo(x + r * 0.45, y - r * 0.12);
+          ctx.lineTo(x, y - r * 0.12);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        break;
+      }
     }
+    ctx.restore();
+  }
+
+  /** The online opponent: a translucent synthetic runner one step behind in its lane. */
+  private drawGhost(ctx: CanvasRenderingContext2D, g: Geometry, opp: OpponentGhost, time: number): void {
+    const s = project(GHOST_Z);
+    const px = g.laneW * AVATAR_UNIT * s;
+    const groundY = this.groundY(g, GHOST_Z);
+    const jump = this.ghostJump * g.laneW * 0.62 * s;
+    const legLen = lerp(LEG_STAND, LEG_DUCK, this.ghostDuck);
+    const hip: Point = { x: this.laneX(g, this.ghostLane, GHOST_Z), y: groundY - legLen * px - jump };
+    const arms = opp.airborne ? 1 : 0.05;
+    const pose = buildSyntheticPose({ cx: 0, cy: 0, sw: 1, leftArm: arms, rightArm: arms }, this.ghostPose);
+    const at = (i: number): Point => {
+      const p = lm(pose, i);
+      return { x: hip.x + p.x * px, y: hip.y + (p.y - TORSO) * px * (1 - this.ghostDuck * 0.15) };
+    };
+    const ls = at(LM.LEFT_SHOULDER);
+    const rs = at(LM.RIGHT_SHOULDER);
+    const nose = at(LM.NOSE);
+    const w = Math.max(1.5, px * 0.14);
+    const phase = (time / 300) * Math.PI * 2;
+
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = PALETTE.pink;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    for (const side of [-1, 1]) {
+      const lift = Math.max(0, Math.sin(phase + (side > 0 ? Math.PI : 0))) * 0.5 * (1 - this.ghostJump) * (1 - this.ghostDuck) + this.ghostJump * 0.7;
+      const hj: Point = { x: hip.x + side * 0.34 * px, y: hip.y };
+      const foot: Point = { x: hip.x + side * (0.45 + this.ghostDuck * 0.35) * px, y: groundY - jump - lift * px };
+      const knee: Point = { x: (hj.x + foot.x) / 2 + side * (0.25 + this.ghostDuck * 0.5) * px, y: (hj.y + foot.y) / 2 - lift * px * 0.35 };
+      ctx.moveTo(hj.x, hj.y);
+      ctx.lineTo(knee.x, knee.y);
+      ctx.lineTo(foot.x, foot.y);
+    }
+    ctx.moveTo(ls.x, ls.y);
+    ctx.lineTo(rs.x, rs.y);
+    ctx.moveTo((ls.x + rs.x) / 2, (ls.y + rs.y) / 2);
+    ctx.lineTo(hip.x, hip.y);
+    for (const [s0, e0, w0] of [
+      [LM.LEFT_SHOULDER, LM.LEFT_ELBOW, LM.LEFT_WRIST],
+      [LM.RIGHT_SHOULDER, LM.RIGHT_ELBOW, LM.RIGHT_WRIST],
+    ] as const) {
+      const a = at(s0);
+      const b = at(e0);
+      const c = at(w0);
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.lineTo(c.x, c.y);
+    }
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(nose.x, nose.y - px * 0.1, px * 0.32, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = PALETTE.pink;
+    ctx.textAlign = 'center';
+    ctx.font = '700 12px "JetBrains Mono", ui-monospace, monospace';
+    ctx.fillText(opp.name, nose.x, nose.y - px * 0.7);
     ctx.restore();
   }
 
@@ -505,7 +647,7 @@ export class GameRenderer {
 
     const flashOk = now < this.successFlashUntil;
     const flashMiss = now < this.missFlashUntil;
-    const bodyColor = flashMiss ? PALETTE.error : flashOk ? PALETTE.success : PALETTE.cyan;
+    const bodyColor = flashMiss ? PALETTE.error : flashOk ? PALETTE.success : game.boosted ? PALETTE.warn : PALETTE.cyan;
 
     // Shadow
     const shadowScale = 1 - this.jumpVisual * 0.45;
@@ -586,6 +728,19 @@ export class GameRenderer {
     for (const p of [lw, rw]) {
       ctx.beginPath();
       ctx.arc(p.x, p.y, w * 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (game.shield) {
+      // Shield bubble around the runner.
+      const c = this.avatarChest;
+      const r = px * 2.6 + Math.sin(now / 240) * px * 0.08;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = rgba(PALETTE.success, 0.55);
+      ctx.lineWidth = Math.max(1.5, px * 0.08);
+      ctx.beginPath();
+      ctx.ellipse(c.x, c.y, r * 0.8, r, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = rgba(PALETTE.success, 0.06);
       ctx.fill();
     }
     ctx.restore();

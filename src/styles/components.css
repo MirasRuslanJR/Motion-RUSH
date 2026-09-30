@@ -149,3 +149,32 @@
   white-space: pre-wrap;
   pointer-events: none;
 }
+
+/* ── Nickname field ── */
+.nick {
+  display: grid;
+  gap: 6px;
+}
+
+.nick__row {
+  display: flex;
+  gap: 8px;
+}
+
+.nick__input {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+}
+
+.nick__input:focus {
+  outline: none;
+  border-color: var(--cyan);
+}

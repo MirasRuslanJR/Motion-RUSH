@@ -155,4 +155,9 @@ export function adaptBaselineDrift(
     baseline.shoulderCenter.y += dy * alpha;
     baseline.nose.y += dy * alpha;
   }
+  // Hips carry the whole-body gestures (step / jump / squat): re-centre them the same way.
+  if (baseline.hipCenter && geometry.hipCenter) {
+    const hy = geometry.hipCenter.y - baseline.hipCenter.y;
+    if (Math.abs(hy) < limit) baseline.hipCenter.y += hy * alpha;
+  }
 }

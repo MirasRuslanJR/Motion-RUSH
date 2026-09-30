@@ -1,17 +1,54 @@
 import { describe, expect, it } from 'vitest';
-import { analyse, calibrate, FIXTURES } from '../../test/fixtures';
+import { analyse, BODY_FIXTURES, calibrate, FIXTURES } from '../../test/fixtures';
 import { diagnose, HintScheduler, type Diagnosis } from './ErrorDiagnosisEngine';
 import type { ExpectedMotion } from './types';
 
 const full = calibrate(true);
 const upper = calibrate(false);
 
-function check(fixture: keyof typeof FIXTURES, expected: ExpectedMotion, baseline = full): Diagnosis {
-  const { f, c } = analyse(FIXTURES[fixture], baseline);
-  return diagnose(expected, f, c, baseline);
+function seated(fixture: keyof typeof FIXTURES, expected: ExpectedMotion): Diagnosis {
+  const { f, c } = analyse(FIXTURES[fixture], upper);
+  return diagnose(expected, f, c, upper);
 }
 
-describe('error diagnosis engine', () => {
+function standing(fixture: keyof typeof BODY_FIXTURES, expected: ExpectedMotion): Diagnosis {
+  const { f, c } = analyse(BODY_FIXTURES[fixture], full);
+  return diagnose(expected, f, c, full);
+}
+
+describe('error diagnosis — body scheme (whole body)', () => {
+  it.each([
+    ['validStepLeft', 'LEAN_LEFT', 'LEAN_OK', 'correct'],
+    ['almostStepLeft', 'LEAN_LEFT', 'LEAN_INSUFFICIENT', 'near'],
+    ['shouldersOnlyLeft', 'LEAN_LEFT', 'LEAN_SHOULDERS_ONLY', 'wrong'],
+    ['validStepRight', 'LEAN_LEFT', 'LEAN_WRONG_DIRECTION', 'wrong'],
+    ['neutral', 'LEAN_RIGHT', 'LEAN_IDLE', 'idle'],
+    ['validRealJump', 'JUMP', 'JUMP_OK', 'correct'],
+    ['lowJump', 'JUMP', 'JUMP_TOO_LOW', 'near'],
+    ['armsOnlyJump', 'JUMP', 'JUMP_ARMS_ONLY', 'other'],
+    ['validSquat', 'JUMP', 'JUMP_DOING_CROUCH', 'other'],
+    ['validSquat', 'CROUCH', 'CROUCH_OK', 'correct'],
+    ['almostSquat', 'CROUCH', 'CROUCH_INSUFFICIENT', 'near'],
+    ['bowInsteadOfSquat', 'CROUCH', 'CROUCH_BOW', 'wrong'],
+    ['validRealJump', 'CROUCH', 'CROUCH_DOING_JUMP', 'other'],
+    ['neutral', 'CENTER', 'CENTER_OK', 'correct'],
+    ['validStepRight', 'CENTER', 'CENTER_OFF', 'wrong'],
+  ] as const)('%s while expecting %s → %s (%s)', (fixture, expected, ruleId, verdict) => {
+    const d = standing(fixture, expected);
+    expect(d.ruleId).toBe(ruleId);
+    expect(d.verdict).toBe(verdict);
+  });
+
+  it('asks for whole-body movement, not shoulders or arms', () => {
+    expect(standing('shouldersOnlyLeft', 'LEAN_LEFT').message).toContain('всем телом');
+    expect(standing('armsOnlyJump', 'JUMP').message).toContain('подпрыгни');
+    expect(standing('bowInsteadOfSquat', 'CROUCH').message).toContain('таз');
+    expect(standing('almostStepLeft', 'LEAN_LEFT').metric).toBe('Шаг в сторону');
+    expect(standing('lowJump', 'JUMP').metric).toBe('Высота прыжка');
+  });
+});
+
+describe('error diagnosis — seated scheme (upper body)', () => {
   it.each([
     ['validJump', 'JUMP', 'JUMP_OK', 'correct'],
     ['almostJump', 'JUMP', 'JUMP_HANDS_LOW', 'near'],
@@ -34,48 +71,47 @@ describe('error diagnosis engine', () => {
     ['validCrouch', 'CROUCH', 'CROUCH_OK', 'correct'],
     ['almostCrouch', 'CROUCH', 'CROUCH_INSUFFICIENT', 'near'],
     ['headOnlyCrouch', 'CROUCH', 'CROUCH_HEAD_ONLY', 'wrong'],
-    ['bowInsteadOfSquat', 'CROUCH', 'CROUCH_BEND_KNEES', 'near'],
     ['crouchLeaning', 'CROUCH', 'CROUCH_OFF_CENTER', 'wrong'],
     ['validJump', 'CROUCH', 'CROUCH_DOING_JUMP', 'other'],
 
     ['neutral', 'CENTER', 'CENTER_OK', 'correct'],
     ['validRightLean', 'CENTER', 'CENTER_OFF', 'wrong'],
   ] as const)('%s while expecting %s → %s (%s)', (fixture, expected, ruleId, verdict) => {
-    const d = check(fixture, expected);
+    const d = seated(fixture, expected);
     expect(d.ruleId).toBe(ruleId);
     expect(d.verdict).toBe(verdict);
   });
 
   it('hints are concrete: they name the body part and the direction', () => {
-    expect(check('oneHandJump', 'JUMP').message).toContain('правую руку');
-    expect(check('oneHandJump', 'JUMP').focus).toEqual(['rightArm']);
-    expect(check('invalidLeftLean', 'LEAN_LEFT').message).toContain('левее');
-    expect(check('invalidLeftLean', 'LEAN_LEFT').arrow).toBe('left');
-    expect(check('wrongDirectionForLeft', 'LEAN_LEFT').message).toContain('ВЛЕВО');
-    expect(check('validRightLean', 'CENTER').message).toContain('левее');
-    expect(check('almostCrouch', 'CROUCH').arrow).toBe('down');
-  });
-
-  it('never produces a generic "not recognised" message', () => {
-    for (const fixture of Object.keys(FIXTURES) as (keyof typeof FIXTURES)[]) {
-      for (const expected of ['JUMP', 'LEAN_LEFT', 'LEAN_RIGHT', 'CROUCH', 'CENTER'] as const) {
-        const d = check(fixture, expected);
-        expect(d.message.length).toBeGreaterThan(10);
-        expect(d.message.toLowerCase()).not.toMatch(/не распознан|try again|unknown|not recognized/);
-      }
-    }
+    expect(seated('oneHandJump', 'JUMP').message).toContain('правую руку');
+    expect(seated('oneHandJump', 'JUMP').focus).toEqual(['rightArm']);
+    expect(seated('invalidLeftLean', 'LEAN_LEFT').message).toContain('левее');
+    expect(seated('invalidLeftLean', 'LEAN_LEFT').arrow).toBe('left');
+    expect(seated('wrongDirectionForLeft', 'LEAN_LEFT').message).toContain('ВЛЕВО');
+    expect(seated('validRightLean', 'CENTER').message).toContain('левее');
+    expect(seated('almostCrouch', 'CROUCH').arrow).toBe('down');
   });
 
   it('progress reflects how close the attempt is', () => {
-    const almost = check('almostCrouch', 'CROUCH');
+    const almost = seated('almostCrouch', 'CROUCH');
     expect(almost.progress).toBeGreaterThan(0.4);
     expect(almost.progress).toBeLessThan(1);
-    expect(check('validCrouch', 'CROUCH').progress).toBe(1);
+    expect(seated('validCrouch', 'CROUCH').progress).toBe(1);
   });
+});
 
-  it('bend-knees hint only applies when hips are visible', () => {
-    expect(check('bowInsteadOfSquat', 'CROUCH', upper).ruleId).not.toBe('CROUCH_BEND_KNEES');
-  });
+it('never produces a generic "not recognised" message in either scheme', () => {
+  const motions = ['JUMP', 'LEAN_LEFT', 'LEAN_RIGHT', 'CROUCH', 'CENTER'] as const;
+  const check = (d: Diagnosis) => {
+    expect(d.message.length).toBeGreaterThan(10);
+    expect(d.message.toLowerCase()).not.toMatch(/не распознан|try again|unknown|not recognized/);
+  };
+  for (const fixture of Object.keys(FIXTURES) as (keyof typeof FIXTURES)[]) {
+    for (const expected of motions) check(seated(fixture, expected));
+  }
+  for (const fixture of Object.keys(BODY_FIXTURES) as (keyof typeof BODY_FIXTURES)[]) {
+    for (const expected of motions) check(standing(fixture, expected));
+  }
 });
 
 describe('hint scheduler', () => {

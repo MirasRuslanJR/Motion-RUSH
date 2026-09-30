@@ -2,7 +2,7 @@ import { GESTURE_CONFIG } from '../../config/gesture.config';
 import { clamp } from '../../lib/math/geometry';
 import type { BodyMode } from './calibration';
 import type { BodyFeatures } from './FeatureExtractor';
-import type { GestureType } from './types';
+import { schemeOf, type ControlScheme, type GestureType } from './types';
 
 export interface GestureThresholds {
   rest: number;
@@ -11,46 +11,54 @@ export interface GestureThresholds {
   release: number;
 }
 
-/** Thresholds for a gesture, adapted to the calibrated framing mode. */
+const pick = (c: GestureThresholds): GestureThresholds => ({
+  rest: c.rest,
+  near: c.near,
+  activation: c.activation,
+  release: c.release,
+});
+
+/** Thresholds for a gesture in the control scheme chosen by calibration. */
 export function thresholdsFor(type: GestureType, mode: BodyMode | null): GestureThresholds {
+  const body = schemeOf(mode) === 'body';
   switch (type) {
     case 'LEAN_LEFT':
-    case 'LEAN_RIGHT': {
-      const c = GESTURE_CONFIG.lean;
-      return { rest: c.rest, near: c.near, activation: c.activation, release: c.release };
-    }
-    case 'JUMP': {
-      const c = GESTURE_CONFIG.jump;
-      return { rest: c.rest, near: c.near, activation: c.activation, release: c.release };
-    }
-    case 'CROUCH': {
-      const c = GESTURE_CONFIG.crouch;
-      const upper = mode === 'upper';
-      return {
-        rest: c.rest,
-        near: c.near,
-        activation: upper ? c.activationUpperBody : c.activation,
-        release: upper ? c.releaseUpperBody : c.release,
-      };
-    }
+    case 'LEAN_RIGHT':
+      return pick(body ? GESTURE_CONFIG.body.step : GESTURE_CONFIG.lean);
+    case 'JUMP':
+      return pick(body ? GESTURE_CONFIG.body.jump : GESTURE_CONFIG.jump);
+    case 'CROUCH':
+      return pick(body ? GESTURE_CONFIG.body.squat : GESTURE_CONFIG.crouch);
   }
+}
+
+/** Sideways offset used for lanes: hips (whole body) in the body scheme, shoulders when seated. */
+export function lateralOffset(f: BodyFeatures, scheme: ControlScheme): number {
+  return scheme === 'body' ? (f.hipShiftX ?? f.leanX) : f.leanX;
 }
 
 /**
  * The single scalar each gesture is judged on. Larger = more of the gesture.
- * JUMP uses the LOWER hand so both arms must be up.
+ *   body:   hip shift (step), whole-body rise (jump), hip drop (squat)
+ *   seated: shoulder shift (lean), LOWER hand height (arms up), shoulder drop (duck)
  */
-export function gestureMetric(type: GestureType, f: BodyFeatures): number {
+export function gestureMetric(type: GestureType, f: BodyFeatures, mode: BodyMode | null): number {
+  const scheme = schemeOf(mode);
   switch (type) {
     case 'LEAN_LEFT':
-      return -f.leanX;
+      return -lateralOffset(f, scheme);
     case 'LEAN_RIGHT':
-      return f.leanX;
+      return lateralOffset(f, scheme);
     case 'JUMP':
-      return Math.min(f.leftHandLiftEffective, f.rightHandLiftEffective);
+      return scheme === 'body' ? f.bodyRise : Math.min(f.leftHandLiftEffective, f.rightHandLiftEffective);
     case 'CROUCH':
-      return f.crouchDepth;
+      return scheme === 'body' ? (f.hipDrop ?? f.crouchDepth) : f.crouchDepth;
   }
+}
+
+/** Gestures confirmed on the first clear frame (a real jump is airborne only ~350 ms). */
+export function isFastGesture(type: GestureType, mode: BodyMode | null): boolean {
+  return type === 'JUMP' && schemeOf(mode) === 'body';
 }
 
 /** 0 at rest, 1 at the activation threshold (may overshoot slightly). */

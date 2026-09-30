@@ -106,6 +106,25 @@
   font-size: 22px;
 }
 
+.landing__modes {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--cyan);
+}
+
+.landing__extra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.landing__extra .landing__best {
+  margin-top: 0;
+}
+
 /* ── Visual: live figure demo ── */
 .landing__visual {
   display: flex;

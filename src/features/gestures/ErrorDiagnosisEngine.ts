@@ -2,10 +2,11 @@ import { GESTURE_CONFIG } from '../../config/gesture.config';
 import { clamp } from '../../lib/math/geometry';
 import type { BodyPart } from '../tracking/landmarks';
 import type { Baseline } from './calibration';
-import { DIAGNOSIS_RULES, type DiagnosisRule, type RuleContext, type Verdict } from './diagnosisRules';
+import { DIAGNOSIS_RULES, metricCaption, type DiagnosisRule, type RuleContext, type Verdict } from './diagnosisRules';
 import type { BodyFeatures } from './FeatureExtractor';
 import type { Classification } from './GestureClassifier';
-import type { Arrow, ExpectedMotion } from './types';
+import { lateralOffset } from './thresholds';
+import { schemeOf, type Arrow, type ExpectedMotion } from './types';
 
 export interface Diagnosis {
   expected: ExpectedMotion;
@@ -27,20 +28,23 @@ export function isErrorVerdict(verdict: Verdict): verdict is ErrorVerdict {
   return verdict === 'near' || verdict === 'wrong' || verdict === 'other';
 }
 
-const RULES_BY_EXPECTED = new Map<ExpectedMotion, DiagnosisRule[]>();
+const RULES = new Map<string, DiagnosisRule[]>();
 for (const rule of DIAGNOSIS_RULES) {
   for (const expected of rule.expects) {
-    const list = RULES_BY_EXPECTED.get(expected) ?? [];
-    list.push(rule);
-    RULES_BY_EXPECTED.set(expected, list);
+    for (const scheme of rule.schemes ?? (['body', 'seated'] as const)) {
+      const key = `${scheme}:${expected}`;
+      const list = RULES.get(key) ?? [];
+      list.push(rule);
+      RULES.set(key, list);
+    }
   }
 }
-for (const list of RULES_BY_EXPECTED.values()) list.sort((a, b) => b.priority - a.priority);
+for (const list of RULES.values()) list.sort((a, b) => b.priority - a.priority);
 
-function progressFor(expected: ExpectedMotion, f: BodyFeatures, c: Classification): number {
+function progressFor(expected: ExpectedMotion, lateral: number, c: Classification): number {
   if (expected === 'CENTER') {
     const tol = GESTURE_CONFIG.center.tolerance;
-    const off = Math.abs(f.leanX);
+    const off = Math.abs(lateral);
     return off <= tol ? 1 : clamp(1 - (off - tol) / GESTURE_CONFIG.lean.activation, 0, 1);
   }
   return clamp(c.readings[expected].progress, 0, 1);
@@ -57,15 +61,19 @@ export function diagnose(
   baseline: Baseline,
   timestamp = 0,
 ): Diagnosis {
+  const scheme = schemeOf(baseline.mode);
+  const lateral = lateralOffset(f, scheme);
   const ctx: RuleContext = {
     expected,
+    scheme,
     f,
     c,
     baseline,
     reading: expected === 'CENTER' ? null : c.readings[expected],
     dir: expected === 'LEAN_LEFT' ? -1 : expected === 'LEAN_RIGHT' ? 1 : 0,
+    lateral,
   };
-  const rules = RULES_BY_EXPECTED.get(expected) ?? [];
+  const rules = RULES.get(`${scheme}:${expected}`) ?? [];
   const rule = rules.find((r) => r.when(ctx)) ?? rules[rules.length - 1];
   if (!rule) throw new Error(`No diagnosis rules for ${expected}`);
   const out = rule.build(ctx);
@@ -76,8 +84,8 @@ export function diagnose(
     message: out.message,
     focus: out.focus,
     arrow: out.arrow,
-    metric: rule.metric,
-    progress: progressFor(expected, f, c),
+    metric: metricCaption(expected, scheme),
+    progress: progressFor(expected, lateral, c),
     timestamp,
   };
 }

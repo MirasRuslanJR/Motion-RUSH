@@ -1,15 +1,15 @@
 import { Icon } from '../../components/Icon';
-import { MOTION_META } from '../../features/gestures/types';
+import { motionMeta, type ControlScheme } from '../../features/gestures/types';
 import type { MoveStats } from '../../features/results/sessionStats';
 
 /** Accuracy per move — horizontal bars with the value at the tip (doubles as the table view). */
-export function MoveBars({ moves }: { moves: MoveStats[] }) {
+export function MoveBars({ moves, scheme }: { moves: MoveStats[]; scheme: ControlScheme }) {
   return (
     <figure className="chart">
       <figcaption className="chart__title">Точность по движениям</figcaption>
       <ul className="bars">
         {moves.map((m) => {
-          const meta = MOTION_META[m.motion];
+          const meta = motionMeta(m.motion, scheme);
           const pct = Math.round(m.accuracy * 100);
           return (
             <li key={m.motion} className="bars__row">

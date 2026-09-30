@@ -78,7 +78,9 @@ export function CalibrationScreen({ engine, onDone }: CalibrationScreenProps) {
             <motion.div key="done" className="calib-result" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
               <p className="calib-result__title">Калибровка готова</p>
               <p className="calib-result__mode">
-                {result.mode === 'full' ? 'Режим: всё тело — видны бёдра' : 'Режим: верхняя часть тела — можно играть сидя'}
+                {result.mode === 'full'
+                  ? 'Управление: всё тело — настоящие прыжки, шаги в стороны и приседания'
+                  : 'Управление: сидя — руки вверх, наклоны корпуса. Для прыжков отойди, чтобы были видны бёдра'}
               </p>
             </motion.div>
           ) : (

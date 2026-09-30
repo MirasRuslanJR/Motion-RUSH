@@ -52,6 +52,47 @@ function raiseArm(pose: Pose, side: -1 | 1, baseline: Baseline): void {
 export function buildTargetPose(pose: Pose, expected: ExpectedMotion, baseline: Baseline, out: Pose = createPose()): Pose {
   copyPoseInto(pose, out);
   const shoulderCenter = midpoint(lm(out, LM.LEFT_SHOULDER), lm(out, LM.RIGHT_SHOULDER));
+  const lh = lm(out, LM.LEFT_HIP);
+  const rh = lm(out, LM.RIGHT_HIP);
+  const hipsVisible = Math.min(lh.v, rh.v) > 0.5;
+
+  // Body scheme: the WHOLE body moves — step sideways, jump up, squat down.
+  if (baseline.mode === 'full' && baseline.hipCenter && hipsVisible) {
+    const hip = midpoint(lh, rh);
+    const baseHip = baseline.hipCenter;
+    const reach = (type: 'LEAN_LEFT' | 'LEAN_RIGHT' | 'JUMP' | 'CROUCH') =>
+      thresholdsFor(type, baseline.mode).activation * OVERSHOOT * baseline.scale;
+    switch (expected) {
+      case 'LEAN_LEFT':
+      case 'LEAN_RIGHT': {
+        const dir = expected === 'LEAN_LEFT' ? -1 : 1;
+        const dx = baseHip.x + dir * reach(expected) - hip.x;
+        if (dir * dx > 0) translate(out, out.length - 1, dx, 0);
+        break;
+      }
+      case 'JUMP': {
+        const dy = baseHip.y - reach('JUMP') - hip.y;
+        if (dy < 0) translate(out, out.length - 1, 0, dy);
+        break;
+      }
+      case 'CROUCH': {
+        const dy = baseHip.y + reach('CROUCH') - hip.y;
+        if (dy <= 0) break;
+        translate(out, LM.RIGHT_HIP, 0, dy);
+        const lk = lm(out, LM.LEFT_KNEE);
+        const rk = lm(out, LM.RIGHT_KNEE);
+        lk.y += dy * 0.5;
+        rk.y += dy * 0.5;
+        lk.x -= dy * 0.3;
+        rk.x += dy * 0.3;
+        break;
+      }
+      case 'CENTER':
+        translate(out, out.length - 1, baseHip.x - hip.x, 0);
+        break;
+    }
+    return out;
+  }
 
   switch (expected) {
     case 'JUMP':
@@ -64,9 +105,7 @@ export function buildTargetPose(pose: Pose, expected: ExpectedMotion, baseline: 
       const dir = expected === 'LEAN_LEFT' ? -1 : 1;
       const targetX = baseline.shoulderCenter.x + dir * thresholdsFor(expected, baseline.mode).activation * OVERSHOOT * baseline.scale;
       if (dir * (shoulderCenter.x - targetX) >= 0) break;
-      const lh = lm(out, LM.LEFT_HIP);
-      const rh = lm(out, LM.RIGHT_HIP);
-      if (Math.min(lh.v, rh.v) > 0.5) {
+      if (hipsVisible) {
         const hip = midpoint(lh, rh);
         const torso = distance(hip, shoulderCenter);
         const current = tiltFromVertical(hip, shoulderCenter);
@@ -114,6 +153,30 @@ export interface TargetGuide {
 
 /** Threshold lines drawn on the camera view: "get your hands above this line". */
 export function targetGuides(expected: ExpectedMotion, baseline: Baseline, currentShoulderY: number): TargetGuide[] {
+  const hip = baseline.mode === 'full' ? baseline.hipCenter : null;
+  if (hip) {
+    const act = (type: 'LEAN_LEFT' | 'LEAN_RIGHT' | 'JUMP' | 'CROUCH') => thresholdsFor(type, baseline.mode).activation * baseline.scale;
+    switch (expected) {
+      case 'JUMP':
+        return [{ orientation: 'horizontal', value: baseline.shoulderCenter.y - act('JUMP'), label: 'ПЛЕЧИ ВЫШЕ — ПРЫЖОК' }];
+      case 'LEAN_LEFT':
+      case 'LEAN_RIGHT': {
+        const dir = expected === 'LEAN_LEFT' ? -1 : 1;
+        return [
+          { orientation: 'vertical', value: hip.x + dir * act(expected), label: dir < 0 ? '◀ ШАГНИ СЮДА' : 'ШАГНИ СЮДА ▶' },
+        ];
+      }
+      case 'CROUCH':
+        return [{ orientation: 'horizontal', value: hip.y + act('CROUCH'), label: 'ТАЗ НИЖЕ' }];
+      case 'CENTER': {
+        const tol = GESTURE_CONFIG.center.tolerance * baseline.scale;
+        return [
+          { orientation: 'vertical', value: hip.x - tol, label: '' },
+          { orientation: 'vertical', value: hip.x + tol, label: 'ЦЕНТР' },
+        ];
+      }
+    }
+  }
   switch (expected) {
     case 'JUMP':
       return [

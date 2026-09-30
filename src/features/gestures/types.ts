@@ -41,6 +41,61 @@ export interface MotionMeta {
   focus: BodyPart[];
 }
 
+/**
+ * body   — full body visible: real steps, real jumps, real squats
+ * seated — upper body only: shoulder lean, arms up, duck
+ */
+export type ControlScheme = 'body' | 'seated';
+
+/** Calibration decides the scheme: hips visible → play with the whole body. */
+export function schemeOf(mode: 'full' | 'upper' | null | undefined): ControlScheme {
+  return mode === 'full' ? 'body' : 'seated';
+}
+
+export const BODY_MOTION_META: Record<ExpectedMotion, MotionMeta> = {
+  LEAN_LEFT: {
+    title: 'Step left',
+    cue: 'Шагни влево всем телом',
+    action: 'Левая полоса',
+    arrow: 'left',
+    focus: ['hips', 'legs'],
+  },
+  LEAN_RIGHT: {
+    title: 'Step right',
+    cue: 'Шагни вправо всем телом',
+    action: 'Правая полоса',
+    arrow: 'right',
+    focus: ['hips', 'legs'],
+  },
+  JUMP: {
+    title: 'Jump',
+    cue: 'Подпрыгни — оторвись от пола',
+    action: 'Прыжок через барьер',
+    arrow: 'up',
+    focus: ['hips', 'legs'],
+  },
+  CROUCH: {
+    title: 'Squat',
+    cue: 'Присядь — опусти таз',
+    action: 'Пригнуться под лучом',
+    arrow: 'down',
+    focus: ['hips', 'legs'],
+  },
+  CENTER: {
+    title: 'Center',
+    cue: 'Вернись в центр',
+    action: 'Центральная полоса',
+    arrow: null,
+    focus: ['hips', 'torso'],
+  },
+};
+
+/** Texts and focus for a motion in the given control scheme. */
+export function motionMeta(motion: ExpectedMotion, scheme: ControlScheme): MotionMeta {
+  return scheme === 'body' ? BODY_MOTION_META[motion] : MOTION_META[motion];
+}
+
+/** Seated scheme texts. */
 export const MOTION_META: Record<ExpectedMotion, MotionMeta> = {
   LEAN_LEFT: {
     title: 'Lean left',

@@ -53,6 +53,13 @@ export interface BodyFeatures extends BodyGeometry {
   noseDrop: number;
   /** Hip-centre drop in SW (null when hips are not visible). */
   hipDrop: number | null;
+  /** Hip-centre lateral shift in SW (null when hips are not visible) — whole-body movement. */
+  hipShiftX: number | null;
+  /**
+   * How far the whole body rose, in SW: min(hip rise, shoulder rise), so a shrug
+   * or raised arms (shoulders only) never looks like a jump.
+   */
+  bodyRise: number;
   /** Wrist height above its own shoulder, in ARM. Positive = above. */
   leftHandLift: number;
   rightHandLift: number;
@@ -138,15 +145,19 @@ export function extractFeatures(pose: Pose, baseline: Baseline | null): BodyFeat
   const rightHandLift = normalizeByBodyScale(g.rightShoulder.y - g.rightWrist.y, arm);
   const leftElbowLift = normalizeByBodyScale(g.leftShoulder.y - g.leftElbow.y, arm);
   const rightElbowLift = normalizeByBodyScale(g.rightShoulder.y - g.rightElbow.y, arm);
+  const crouchDepth = normalizeByBodyScale(g.shoulderCenter.y - ref.y, scale);
+  const baseHip = baseline?.hipCenter ?? null;
+  const hipDrop = g.hipCenter && baseHip ? normalizeByBodyScale(g.hipCenter.y - baseHip.y, scale) : null;
 
   return {
     ...g,
     leanX: normalizeByBodyScale(g.shoulderCenter.x - ref.x, scale),
     headX: normalizeByBodyScale(g.nose.x - refNose.x, scale),
-    crouchDepth: normalizeByBodyScale(g.shoulderCenter.y - ref.y, scale),
+    crouchDepth,
     noseDrop: normalizeByBodyScale(g.nose.y - refNose.y, scale),
-    hipDrop:
-      g.hipCenter && baseline?.hipCenter ? normalizeByBodyScale(g.hipCenter.y - baseline.hipCenter.y, scale) : null,
+    hipDrop,
+    hipShiftX: g.hipCenter && baseHip ? normalizeByBodyScale(g.hipCenter.x - baseHip.x, scale) : null,
+    bodyRise: hipDrop === null ? -crouchDepth : Math.min(-hipDrop, -crouchDepth),
     leftHandLift,
     rightHandLift,
     leftHandLiftEffective: effectiveLift(leftHandLift, leftElbowLift, g.leftWristVisible, g.leftElbowVisible),

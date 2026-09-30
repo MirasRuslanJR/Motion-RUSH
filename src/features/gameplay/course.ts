@@ -1,5 +1,5 @@
-import { GAME_CONFIG, type CoursePhase } from '../../config/game.config';
-import { OBSTACLE_REQUIREMENT, type CourseItem, type Lane, type ObstacleKind } from './types';
+import { GAME_CONFIG, type CourseConfig, type CoursePhase } from '../../config/game.config';
+import { isPickup, OBSTACLE_REQUIREMENT, type CourseItem, type Lane, type ObstacleKind, type PickupKind } from './types';
 
 /** mulberry32 — tiny deterministic PRNG. Same seed → same course. */
 export function createRng(seed: number): () => number {
@@ -18,11 +18,17 @@ function openLane(kind: ObstacleKind): Lane {
 }
 
 function sideOf(kind: ObstacleKind): Lane {
-  const req = kind === 'ORB' ? null : OBSTACLE_REQUIREMENT[kind];
+  const req = isPickup(kind) ? null : OBSTACLE_REQUIREMENT[kind];
   return req === 'LEAN_LEFT' ? -1 : req === 'LEAN_RIGHT' ? 1 : 0;
 }
 
-type CourseConfig = typeof GAME_CONFIG.course;
+/** Seed for the daily challenge: the same course for everyone on a calendar day (Astana time). */
+export function dailySeed(date: Date = new Date()): number {
+  const day = new Date(date.getTime() + 5 * 3600 * 1000).toISOString().slice(0, 10);
+  let h = 2166136261;
+  for (const ch of day) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return h >>> 0;
+}
 
 function phaseAt(time: number, phases: readonly CoursePhase[]): CoursePhase | null {
   return phases.find((p) => time < p.untilMs) ?? null;
@@ -68,7 +74,9 @@ export function generateCourse(seed: number = GAME_CONFIG.seed, cfg: CourseConfi
     if (rng() < phase.orbChance) {
       const lanes: Lane[] = [-1, 0, 1];
       const lane = lanes[Math.floor(rng() * lanes.length)] ?? 0;
-      items.push({ id: id++, kind: 'ORB', arriveAt: time + gap / 2, leadMs: phase.leadMs, lane });
+      const power = rng() < GAME_CONFIG.powerUps.chance;
+      const pickup: PickupKind = power ? (rng() < 0.5 ? 'SHIELD' : 'BOOST') : 'ORB';
+      items.push({ id: id++, kind: pickup, arriveAt: time + gap / 2, leadMs: phase.leadMs, lane });
     }
 
     prevPrev = prev;

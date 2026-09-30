@@ -1,4 +1,4 @@
-import type { ExpectedMotion } from '../gestures/types';
+import type { ControlScheme, ExpectedMotion } from '../gestures/types';
 
 /** -1 = left lane, 0 = centre, 1 = right lane. */
 export type Lane = -1 | 0 | 1;
@@ -9,9 +9,15 @@ export type Lane = -1 | 0 | 1;
  * BEAM   — overhead laser across all lanes (duck under)
  * ORB    — optional bonus pickup in a lane
  */
-export type ObstacleKind = 'GATE_LEFT' | 'GATE_RIGHT' | 'GATE_CENTER' | 'HURDLE' | 'BEAM' | 'ORB';
+export type PickupKind = 'ORB' | 'SHIELD' | 'BOOST';
+export type ObstacleKind = 'GATE_LEFT' | 'GATE_RIGHT' | 'GATE_CENTER' | 'HURDLE' | 'BEAM' | PickupKind;
 
-export const OBSTACLE_REQUIREMENT: Record<Exclude<ObstacleKind, 'ORB'>, ExpectedMotion> = {
+/** Optional pickups in a lane: ORB = points, SHIELD = absorbs one miss, BOOST = double points. */
+export function isPickup(kind: ObstacleKind): kind is PickupKind {
+  return kind === 'ORB' || kind === 'SHIELD' || kind === 'BOOST';
+}
+
+export const OBSTACLE_REQUIREMENT: Record<Exclude<ObstacleKind, PickupKind>, ExpectedMotion> = {
   GATE_LEFT: 'LEAN_LEFT',
   GATE_RIGHT: 'LEAN_RIGHT',
   GATE_CENTER: 'CENTER',
@@ -56,6 +62,10 @@ export interface ObstacleRecord {
 export type GameOutcome = 'complete' | 'out-of-energy';
 
 export interface SessionResult {
+  /** Game mode id (see features/modes). */
+  mode: string;
+  /** Control scheme the run was played with. */
+  scheme: ControlScheme;
   outcome: GameOutcome;
   score: number;
   bestCombo: number;

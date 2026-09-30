@@ -7,8 +7,8 @@ import { Icon } from '../components/Icon';
 import { Ring } from '../components/Ring';
 import { setRingProgress } from '../components/ringProgress';
 import type { MotionEngine } from '../features/engine/MotionEngine';
-import { MOTION_META, type GestureType } from '../features/gestures/types';
-import { useEngineFrame } from '../hooks/useEngine';
+import { motionMeta, type GestureType } from '../features/gestures/types';
+import { useEngineFrame, useMotionUi } from '../hooks/useEngine';
 import { sfx } from '../lib/audio/sfx';
 import './SetupScreens.css';
 
@@ -29,7 +29,10 @@ export function TutorialScreen({ engine, onDone }: TutorialScreenProps) {
   const circleRef = useRef<SVGCircleElement>(null);
   const held = useRef(0);
   const gesture = STEPS[step] ?? 'JUMP';
-  const meta = MOTION_META[gesture];
+  const scheme = useMotionUi(engine, (s) => s.scheme);
+  const meta = motionMeta(gesture, scheme);
+  /** A real jump is short: one confirmed take-off counts, other moves are held briefly. */
+  const holdMs = scheme === 'body' && gesture === 'JUMP' ? 0 : HOLD_MS;
 
   useEffect(() => {
     engine.setExpected(success ? null : gesture);
@@ -62,8 +65,8 @@ export function TutorialScreen({ engine, onDone }: TutorialScreenProps) {
       (frame.lateral.phase === 'CONFIRMED' && frame.lateral.gesture === gesture) ||
       (frame.vertical.phase === 'CONFIRMED' && frame.vertical.gesture === gesture);
     held.current = confirmed ? held.current + dt : 0;
-    setRingProgress(circleRef.current, held.current / HOLD_MS);
-    if (held.current >= HOLD_MS) {
+    setRingProgress(circleRef.current, holdMs === 0 ? (confirmed ? 1 : 0) : held.current / holdMs);
+    if (confirmed && held.current >= holdMs) {
       sfx.play('confirm');
       setSuccess(true);
     }
@@ -79,14 +82,18 @@ export function TutorialScreen({ engine, onDone }: TutorialScreenProps) {
       <aside className="setup__panel tutorial__panel">
         <p className="t-label">Шаг 3 · обучение · {step + 1} из {STEPS.length}</p>
         <ol className="tutorial__steps" aria-label="Движения">
-          {STEPS.map((g, i) => (
-            <li key={g} className={i < step || (i === step && success) ? 'is-done' : i === step ? 'is-current' : ''}>
-              <span className="tutorial__step-icon">
-                {i < step || (i === step && success) ? <Icon name="check" size={14} /> : MOTION_META[g].arrow && <Icon name={MOTION_META[g].arrow} size={14} />}
-              </span>
-              {MOTION_META[g].title}
-            </li>
-          ))}
+          {STEPS.map((g, i) => {
+            const m = motionMeta(g, scheme);
+            const done = i < step || (i === step && success);
+            return (
+              <li key={g} className={done ? 'is-done' : i === step ? 'is-current' : ''}>
+                <span className="tutorial__step-icon">
+                  {done ? <Icon name="check" size={14} /> : m.arrow && <Icon name={m.arrow} size={14} />}
+                </span>
+                {m.title}
+              </li>
+            );
+          })}
         </ol>
 
         <AnimatePresence mode="wait">
@@ -98,7 +105,7 @@ export function TutorialScreen({ engine, onDone }: TutorialScreenProps) {
             exit={{ opacity: 0, x: -24 }}
             transition={{ duration: 0.25 }}
           >
-            <DemoFigure move={gesture} className="tutorial__figure" label={`Пример: ${meta.cue}`} />
+            <DemoFigure move={gesture} scheme={scheme} className="tutorial__figure" label={`Пример: ${meta.cue}`} />
             <h1 className="t-headline tutorial__title">{meta.title}</h1>
             <p className="tutorial__cue">{meta.cue}</p>
             <p className="t-label tutorial__action">
@@ -111,7 +118,7 @@ export function TutorialScreen({ engine, onDone }: TutorialScreenProps) {
           <Ring circleRef={circleRef} size={64} tone={success ? 'success' : 'cyan'}>
             {success ? <Icon name="check" size={22} /> : meta.arrow && <Icon name={meta.arrow} size={22} />}
           </Ring>
-          <p>{success ? 'Засчитано!' : 'Сделай движение и задержись на полсекунды'}</p>
+          <p>{success ? 'Засчитано!' : holdMs === 0 ? 'Подпрыгни по-настоящему — обеими ногами' : 'Сделай движение и задержись на полсекунды'}</p>
         </div>
 
         <div className="tutorial__skip">

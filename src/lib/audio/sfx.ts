@@ -10,7 +10,9 @@ export type SfxName =
   | 'confirm'
   | 'step'
   | 'complete'
-  | 'gameover';
+  | 'gameover'
+  | 'powerup'
+  | 'shield';
 
 interface Note {
   freq: number;
@@ -52,6 +54,15 @@ const SOUNDS: Record<SfxName, Note[]> = {
     { freq: 990, at: 0.09, dur: 0.18, type: 'triangle', gain: 0.35 },
   ],
   step: [{ freq: 520, at: 0, dur: 0.06, type: 'sine', gain: 0.2 }],
+  powerup: [
+    { freq: 600, at: 0, dur: 0.1, type: 'triangle', gain: 0.3, to: 900 },
+    { freq: 900, at: 0.08, dur: 0.1, type: 'triangle', gain: 0.3, to: 1350 },
+    { freq: 1350, at: 0.16, dur: 0.2, type: 'sine', gain: 0.3, to: 1800 },
+  ],
+  shield: [
+    { freq: 300, at: 0, dur: 0.12, type: 'square', gain: 0.1 },
+    { freq: 880, at: 0.05, dur: 0.25, type: 'sine', gain: 0.3, to: 660 },
+  ],
   complete: [
     { freq: 523, at: 0, dur: 0.14, type: 'triangle', gain: 0.35 },
     { freq: 659, at: 0.12, dur: 0.14, type: 'triangle', gain: 0.35 },

@@ -1,9 +1,10 @@
 import { GAME_CONFIG } from '../../config/game.config';
 import type { Verdict } from '../gestures/diagnosisRules';
 import { isErrorVerdict } from '../gestures/ErrorDiagnosisEngine';
-import { MOTION_META, type ExpectedMotion } from '../gestures/types';
+import { motionMeta, type ControlScheme, type ExpectedMotion } from '../gestures/types';
 import { courseDuration, generateCourse } from './course';
 import {
+  isPickup,
   OBSTACLE_REQUIREMENT,
   type ClearQuality,
   type CourseItem,
@@ -40,11 +41,24 @@ export type GameEvent =
   | { type: 'clear'; item: CourseItem; quality: ClearQuality; points: number; combo: number; multiplier: number }
   | { type: 'miss'; item: CourseItem; reason: MissReason }
   | { type: 'orb'; item: CourseItem; points: number }
+  | { type: 'powerup'; item: CourseItem; kind: 'SHIELD' | 'BOOST' }
+  | { type: 'shield-used'; item: CourseItem }
   | { type: 'combo'; combo: number; multiplier: number }
   | { type: 'jump' }
   | { type: 'pause' }
   | { type: 'resume' }
   | { type: 'end'; outcome: GameOutcome };
+
+/** Per-mode rules (see features/modes). */
+export interface GameRules {
+  mode: string;
+  scheme: ControlScheme;
+  energy: number;
+  /** Practice: misses never cost energy. */
+  practice: boolean;
+}
+
+const DEFAULT_RULES: GameRules = { mode: 'classic', scheme: 'seated', energy: GAME_CONFIG.energy, practice: false };
 
 interface ActiveObstacle {
   item: CourseItem;
@@ -58,13 +72,23 @@ interface ActiveObstacle {
   lastRawError: MissReason | null;
 }
 
-const TOO_EARLY: Record<ExpectedMotion, string> = {
-  JUMP: 'Прыжок был слишком рано — поднимай руки, когда барьер уже рядом',
-  CROUCH: 'Встал слишком рано — держи присед, пока луч не пролетит',
-  LEAN_LEFT: 'Вернулся раньше времени — держи наклон, пока ворота не пройдены',
-  LEAN_RIGHT: 'Вернулся раньше времени — держи наклон, пока ворота не пройдены',
-  CENTER: 'Ушёл из центра раньше времени — стой ровно, пока ворота не пройдены',
-};
+function tooEarly(required: ExpectedMotion, scheme: ControlScheme): string {
+  switch (required) {
+    case 'JUMP':
+      return scheme === 'body'
+        ? 'Прыжок был слишком рано — прыгай, когда барьер уже у ног'
+        : 'Прыжок был слишком рано — поднимай руки, когда барьер уже рядом';
+    case 'CROUCH':
+      return 'Встал слишком рано — держи присед, пока луч не пролетит';
+    case 'LEAN_LEFT':
+    case 'LEAN_RIGHT':
+      return scheme === 'body'
+        ? 'Вернулся раньше времени — стой в полосе, пока ворота не пройдены'
+        : 'Вернулся раньше времени — держи наклон, пока ворота не пройдены';
+    case 'CENTER':
+      return 'Ушёл из центра раньше времени — стой ровно, пока ворота не пройдены';
+  }
+}
 
 type GameConfig = typeof GAME_CONFIG;
 
@@ -106,19 +130,30 @@ export class GameEngine {
   private orbsCollected = 0;
   private readonly timeline: { t: number; score: number }[] = [{ t: 0, score: 0 }];
   private outcome: GameOutcome | null = null;
+  readonly rules: GameRules;
+  /** A collected shield absorbs the next miss. */
+  shield = false;
+  /** Double points until this game time. */
+  boostUntil = Number.NEGATIVE_INFINITY;
 
-  constructor(course: CourseItem[] = generateCourse(), cfg: GameConfig = GAME_CONFIG) {
+  constructor(course: CourseItem[] = generateCourse(), cfg: GameConfig = GAME_CONFIG, rules: Partial<GameRules> = {}) {
     this.cfg = cfg;
+    this.rules = { ...DEFAULT_RULES, ...rules };
     this.course = course;
     this.duration = courseDuration(course, cfg.course);
-    this.energy = cfg.energy;
-    this.pending = course.filter((c) => c.kind !== 'ORB');
-    this.orbs = course.filter((c) => c.kind === 'ORB');
+    this.energy = this.rules.energy;
+    this.pending = course.filter((c) => !isPickup(c.kind));
+    this.orbs = course.filter((c) => isPickup(c.kind));
+  }
+
+  get boosted(): boolean {
+    return this.time < this.boostUntil;
   }
 
   get multiplier(): number {
     const s = this.cfg.scoring;
-    return Math.min(s.maxMultiplier, 1 + Math.floor(this.combo / s.comboPerMultiplier));
+    const combo = Math.min(s.maxMultiplier, 1 + Math.floor(this.combo / s.comboPerMultiplier));
+    return combo * (this.boosted ? this.cfg.powerUps.boostMultiplier : 1);
   }
 
   /** Motion the player must perform right now (drives error mode), if any. */
@@ -272,10 +307,18 @@ export class GameEngine {
       const orb = this.orbs[0];
       if (!orb || t < orb.arriveAt - w) break;
       if (this.lane === orb.lane) {
-        const points = this.cfg.scoring.orb * this.multiplier;
-        this.score += points;
+        if (orb.kind === 'SHIELD') {
+          this.shield = true;
+          events.push({ type: 'powerup', item: orb, kind: 'SHIELD' });
+        } else if (orb.kind === 'BOOST') {
+          this.boostUntil = t + this.cfg.powerUps.boostMs;
+          events.push({ type: 'powerup', item: orb, kind: 'BOOST' });
+        } else {
+          const points = this.cfg.scoring.orb * this.multiplier;
+          this.score += points;
+          events.push({ type: 'orb', item: orb, points });
+        }
         this.orbsCollected++;
-        events.push({ type: 'orb', item: orb, points });
         this.orbs.shift();
       } else if (t > orb.arriveAt + w) {
         this.orbs.shift();
@@ -288,7 +331,7 @@ export class GameEngine {
   private updateObstacles(t: number, input: PlayerInput, events: GameEvent[]): void {
     const next = this.pending[0];
     if (!this.active && next && t >= next.arriveAt - this.cfg.promptWindowMs) {
-      if (next.kind === 'ORB') return;
+      if (isPickup(next.kind)) return;
       this.active = {
         item: next,
         required: OBSTACLE_REQUIREMENT[next.kind],
@@ -366,13 +409,23 @@ export class GameEngine {
   }
 
   private resolveMiss(a: ActiveObstacle, events: GameEvent[]): void {
+    const scheme = this.rules.scheme;
     const reason: MissReason =
       a.firstSatisfiedAt !== null
-        ? { ruleId: 'TOO_EARLY', message: TOO_EARLY[a.required] }
+        ? { ruleId: 'TOO_EARLY', message: tooEarly(a.required, scheme) }
         : (a.lastErrorHint ??
-          a.lastRawError ?? { ruleId: 'NO_ATTEMPT', message: `Движения не было — ${MOTION_META[a.required].cue.toLowerCase()}` });
+          a.lastRawError ?? {
+            ruleId: 'NO_ATTEMPT',
+            message: `Движения не было — ${motionMeta(a.required, scheme).cue.toLowerCase()}`,
+          });
     this.combo = 0;
-    this.energy = Math.max(0, this.energy - 1);
+    if (this.shield) {
+      // The shield takes the hit: no energy lost (the miss still counts in stats).
+      this.shield = false;
+      events.push({ type: 'shield-used', item: a.item });
+    } else if (!this.rules.practice) {
+      this.energy = Math.max(0, this.energy - 1);
+    }
     this.record(a, 'miss', reason);
     events.push({ type: 'miss', item: a.item, reason });
   }
@@ -388,6 +441,8 @@ export class GameEngine {
 
   result(): SessionResult {
     return {
+      mode: this.rules.mode,
+      scheme: this.rules.scheme,
       outcome: this.outcome ?? 'complete',
       score: this.score,
       bestCombo: this.bestCombo,
@@ -396,7 +451,7 @@ export class GameEngine {
       gesturesDetected: this.gesturesDetected,
       hintsShown: this.hintsShown,
       orbsCollected: this.orbsCollected,
-      orbsTotal: this.course.filter((c) => c.kind === 'ORB').length,
+      orbsTotal: this.course.filter((c) => isPickup(c.kind)).length,
       timeline: [...this.timeline],
     };
   }

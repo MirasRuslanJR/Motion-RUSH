@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { GESTURE_CONFIG } from '../../config/gesture.config';
-import { analyse, calibrate, FIXTURES, makePose } from '../../test/fixtures';
-import { Calibrator, adaptBaselineDrift } from './calibration';
+import { analyse, BODY_FIXTURES, calibrate, FIXTURES, makePose } from '../../test/fixtures';
+import { Calibrator, adaptBaselineDrift, type Baseline } from './calibration';
 import { extractFeatures, extractGeometry } from './FeatureExtractor';
 import { classify } from './GestureClassifier';
 import { GestureStateMachine } from './GestureStateMachine';
 import { buildTargetPose } from './targetPose';
 import type { GestureEvent } from './types';
 
+/** Full body visible → "body" scheme (steps, real jumps, squats). */
 const full = calibrate(true);
+/** Upper body only → "seated" scheme (lean, arms up, duck). */
 const upper = calibrate(false);
 
 describe('calibration', () => {
@@ -37,30 +39,67 @@ describe('calibration', () => {
   });
 
   it('thresholds scale with the body: same gesture, different distance', () => {
-    const far = new Calibrator();
-    for (let t = 0; t <= 2600; t += 33) far.push(extractGeometry(makePose({ sw: 0.09 })), true, t);
-    const baseline = far.baseline;
-    expect(baseline).not.toBeNull();
-    if (!baseline) return;
-    const f = extractFeatures(makePose({ sw: 0.09, leanDeg: -22 }), baseline);
-    expect(classify(f, baseline.mode).readings.LEAN_LEFT.active).toBe(true);
+    for (const lowerBodyVisible of [true, false]) {
+      const far = new Calibrator();
+      for (let t = 0; t <= 2600; t += 33) far.push(extractGeometry(makePose({ sw: 0.09, lowerBodyVisible })), true, t);
+      const baseline = far.baseline as Baseline;
+      const move = lowerBodyVisible ? { shift: -0.7 } : { leanDeg: -22 };
+      const f = extractFeatures(makePose({ sw: 0.09, lowerBodyVisible, ...move }), baseline);
+      expect(classify(f, baseline.mode).readings.LEAN_LEFT.active).toBe(true);
+    }
   });
 
-  it('slowly re-centres small drift but never absorbs a real lean', () => {
+  it('slowly re-centres small drift but never absorbs a real move', () => {
     const b = calibrate(true);
     const startX = b.shoulderCenter.x;
     adaptBaselineDrift(b, extractGeometry(makePose({ shift: 0.05 })), 5000);
     expect(b.shoulderCenter.x).toBeGreaterThan(startX);
     const afterDrift = b.shoulderCenter.x;
-    adaptBaselineDrift(b, extractGeometry(makePose({ leanDeg: -22 })), 5000);
+    adaptBaselineDrift(b, extractGeometry(makePose({ shift: -0.7 })), 5000);
     expect(b.shoulderCenter.x).toBe(afterDrift);
   });
 });
 
-describe('gesture classifier', () => {
+describe('gesture classifier — body scheme (whole body)', () => {
   it('neutral pose triggers nothing', () => {
-    const { c } = analyse(FIXTURES.neutral, full);
-    expect(c.candidates).toEqual({ lateral: null, vertical: null });
+    expect(analyse(BODY_FIXTURES.neutral, full).c.candidates).toEqual({ lateral: null, vertical: null });
+  });
+
+  it.each([
+    ['validStepLeft', 'lateral', 'LEAN_LEFT'],
+    ['validStepRight', 'lateral', 'LEAN_RIGHT'],
+    ['validRealJump', 'vertical', 'JUMP'],
+    ['validSquat', 'vertical', 'CROUCH'],
+  ] as const)('%s → %s %s', (name, channel, expected) => {
+    expect(analyse(BODY_FIXTURES[name], full).c.candidates[channel]).toBe(expected);
+  });
+
+  it('moving only the shoulders is NOT a step', () => {
+    const { c } = analyse(BODY_FIXTURES.shouldersOnlyLeft, full);
+    expect(c.candidates.lateral).toBeNull();
+  });
+
+  it('raising the arms is NOT a jump — the body has to leave the floor', () => {
+    const { c } = analyse(BODY_FIXTURES.armsOnlyJump, full);
+    expect(c.readings.JUMP.active).toBe(false);
+  });
+
+  it('bowing is NOT a squat — the hips have to go down', () => {
+    const { c } = analyse(BODY_FIXTURES.bowInsteadOfSquat, full);
+    expect(c.readings.CROUCH.active).toBe(false);
+  });
+
+  it('a jump is a fast gesture; step and jump combine on separate channels', () => {
+    const { c } = analyse(BODY_FIXTURES.jumpWhileStepping, full);
+    expect(c.candidates).toEqual({ lateral: 'LEAN_LEFT', vertical: 'JUMP' });
+    expect(c.readings.JUMP.fast).toBe(true);
+    expect(c.readings.LEAN_LEFT.fast).toBe(false);
+  });
+});
+
+describe('gesture classifier — seated scheme (upper body)', () => {
+  it('neutral pose triggers nothing', () => {
+    expect(analyse(FIXTURES.neutral, upper).c.candidates).toEqual({ lateral: null, vertical: null });
   });
 
   it.each([
@@ -70,8 +109,7 @@ describe('gesture classifier', () => {
     ['validCrouch', 'vertical', 'CROUCH'],
     ['elbowsUpWristsHidden', 'vertical', 'JUMP'],
   ] as const)('%s → %s %s', (name, channel, expected) => {
-    const { c } = analyse(FIXTURES[name], full);
-    expect(c.candidates[channel]).toBe(expected);
+    expect(analyse(FIXTURES[name], upper).c.candidates[channel]).toBe(expected);
   });
 
   it.each([
@@ -80,41 +118,31 @@ describe('gesture classifier', () => {
     ['oneHandJump', 'JUMP'],
     ['almostCrouch', 'CROUCH'],
   ] as const)('%s is attempting but NOT active (%s)', (name, gesture) => {
-    const { c } = analyse(FIXTURES[name], full);
-    expect(c.readings[gesture].active).toBe(false);
+    expect(analyse(FIXTURES[name], upper).c.readings[gesture].active).toBe(false);
   });
 
   it('almost-correct poses report partial progress', () => {
-    const { c } = analyse(FIXTURES.almostJump, full);
+    const { c } = analyse(FIXTURES.almostJump, upper);
     expect(c.readings.JUMP.attempting).toBe(true);
     expect(c.readings.JUMP.progress).toBeGreaterThan(0.5);
     expect(c.readings.JUMP.progress).toBeLessThan(1);
   });
 
-  it('upper-body mode uses a smaller crouch threshold', () => {
-    const { c } = analyse({ crouch: 0.34 }, upper);
-    expect(c.readings.CROUCH.active).toBe(true);
-    const fullRes = analyse({ crouch: 0.34 }, full);
-    expect(fullRes.c.readings.CROUCH.active).toBe(false);
-  });
-
   it('resolves conflicts deterministically: arms up beats crouch on the vertical channel', () => {
-    const { c } = analyse(FIXTURES.crouchWithArmsUp, full);
+    const { c } = analyse(FIXTURES.crouchWithArmsUp, upper);
     expect(c.readings.CROUCH.active).toBe(true);
     expect(c.candidates.vertical).toBe('JUMP');
   });
 
-  it('lean and jump coexist on separate channels', () => {
-    const { c } = analyse({ leanDeg: -22, leftArm: 1, rightArm: 1 }, full);
+  it('lean and arms-up coexist on separate channels', () => {
+    const { c } = analyse({ leanDeg: -22, leftArm: 1, rightArm: 1 }, upper);
     expect(c.candidates).toEqual({ lateral: 'LEAN_LEFT', vertical: 'JUMP' });
   });
 });
 
 describe('gesture state machine', () => {
-  const run = (sm: GestureStateMachine, fixture: keyof typeof FIXTURES, t: number): GestureEvent[] => {
-    const { c } = analyse(FIXTURES[fixture], full);
-    return sm.update(c, null, t);
-  };
+  const run = (sm: GestureStateMachine, fixture: keyof typeof FIXTURES, t: number): GestureEvent[] =>
+    sm.update(analyse(FIXTURES[fixture], upper).c, null, t);
 
   it('requires stable frames, emits once, then releases with hysteresis', () => {
     const sm = new GestureStateMachine('lateral');
@@ -143,6 +171,14 @@ describe('gesture state machine', () => {
     run(sm, 'neutral', 33);
     expect(sm.current.phase).toBe('NEUTRAL');
     expect(sm.confirmed).toBeNull();
+  });
+
+  it('confirms a real jump on its first clear frame (it only lasts ~350 ms)', () => {
+    const sm = new GestureStateMachine('vertical');
+    const events = sm.update(analyse(BODY_FIXTURES.validRealJump, full).c, null, 0);
+    expect(events).toEqual([expect.objectContaining({ type: 'JUMP', phase: 'start' })]);
+    const landed = sm.update(analyse(BODY_FIXTURES.neutral, full).c, null, 60);
+    expect(landed).toEqual([expect.objectContaining({ type: 'JUMP', phase: 'end' })]);
   });
 
   it('cooldown blocks the same gesture but not a different one', () => {
@@ -185,7 +221,7 @@ describe('gesture state machine', () => {
 });
 
 describe('ghost target pose', () => {
-  it.each(['JUMP', 'LEAN_LEFT', 'LEAN_RIGHT', 'CROUCH'] as const)('ghost for %s satisfies the gesture', (expected) => {
+  it.each(['JUMP', 'LEAN_LEFT', 'LEAN_RIGHT', 'CROUCH'] as const)('ghost for %s satisfies the gesture in both schemes', (expected) => {
     for (const baseline of [full, upper]) {
       const pose = makePose({ lowerBodyVisible: baseline.mode === 'full' });
       const ghost = buildTargetPose(pose, expected, baseline);

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import type { MotionEngine } from '../features/engine/MotionEngine';
-import { MOTION_META } from '../features/gestures/types';
+import { motionMeta } from '../features/gestures/types';
 import { CameraOverlayRenderer } from '../features/render/CameraOverlayRenderer';
 import { useEngineFrame, useMotionUi } from '../hooks/useEngine';
 import { Icon } from './Icon';
@@ -40,6 +40,7 @@ export function CameraViewport({
   const lateral = useMotionUi(engine, (s) => s.lateral);
   const vertical = useMotionUi(engine, (s) => s.vertical);
   const modelReady = useMotionUi(engine, (s) => s.model === 'ready');
+  const scheme = useMotionUi(engine, (s) => s.scheme);
 
   useLayoutEffect(() => {
     const host = hostRef.current;
@@ -97,8 +98,8 @@ export function CameraViewport({
             <div className="viewport__gestures" aria-live="polite">
               {gestures.map((g) => (
                 <span key={g} className="gesture-badge">
-                  {MOTION_META[g].arrow && <Icon name={MOTION_META[g].arrow} size={14} />}
-                  {MOTION_META[g].title}
+                  {motionMeta(g, scheme).arrow && <Icon name={motionMeta(g, scheme).arrow ?? 'up'} size={14} />}
+                  {motionMeta(g, scheme).title}
                 </span>
               ))}
             </div>

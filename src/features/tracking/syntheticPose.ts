@@ -31,6 +31,8 @@ export interface SyntheticPoseParams {
   headDrop?: number;
   /** Upper body drops while hips stay (bowing instead of squatting), shoulder widths. */
   bow?: number;
+  /** Whole body is lifted off the ground (a real jump), shoulder widths. */
+  rise?: number;
   /** Apparent shoulder width factor: < 1 means the body is turned sideways. */
   turn?: number;
   /** false = seated / upper-body framing: hips and legs are not visible. */
@@ -78,6 +80,7 @@ export function buildSyntheticPose(params: SyntheticPoseParams, out: Pose = crea
     headShift = 0,
     headDrop = 0,
     bow = 0,
+    rise = 0,
     turn = 1,
     lowerBodyVisible = true,
     leftWristVisibility,
@@ -174,5 +177,8 @@ export function buildSyntheticPose(params: SyntheticPoseParams, out: Pose = crea
   leg(-1);
   leg(1);
 
+  if (rise !== 0) {
+    for (const p of out) p.y -= rise * sw;
+  }
   return out;
 }
