@@ -7,6 +7,7 @@ import { MotionEngine } from '../features/engine/MotionEngine';
 import type { SessionResult } from '../features/gameplay/types';
 import { getMode, type GameModeId } from '../features/modes/modes';
 import { DuelRoom, newRoomCode, normalizeRoomCode } from '../features/online/DuelRoom';
+import { QuickMatch } from '../features/online/QuickMatch';
 import { ONLINE_ENABLED } from '../lib/supabase';
 import { loadPoseBackend } from '../features/tracking/poseBackend';
 import { computeSessionStats } from '../features/results/sessionStats';
@@ -143,6 +144,32 @@ export function App() {
     [replaceRoom],
   );
   const onCreateRoom = useCallback(() => openRoom(newRoomCode()), [openRoom]);
+  const [searching, setSearching] = useState(false);
+  const [quickError, setQuickError] = useState<string | null>(null);
+  const quickRef = useRef<QuickMatch | null>(null);
+  const cancelQuick = useCallback(() => {
+    void quickRef.current?.cancel();
+    quickRef.current = null;
+    setSearching(false);
+  }, []);
+  const onQuickMatch = useCallback(() => {
+    const me = loadProfile();
+    const quick = new QuickMatch({ id: me.playerId, name: me.nickname });
+    quickRef.current = quick;
+    setSearching(true);
+    setQuickError(null);
+    void quick.find().then((code) => {
+      if (quickRef.current !== quick) return;
+      quickRef.current = null;
+      setSearching(false);
+      if (code) openRoom(code);
+      else setQuickError('Не удалось подключиться к онлайну — проверь интернет');
+    });
+  }, [openRoom]);
+  // Leaving the lobby stops the search.
+  useEffect(() => {
+    if (flow.phase !== 'lobby' && quickRef.current) cancelQuick();
+  }, [flow.phase, cancelQuick]);
   const onLeaveRoom = useCallback(() => {
     if (roomRef.current) replaceRoom(null);
     else dispatch({ type: 'MODES' });
@@ -257,6 +284,10 @@ export function App() {
             engine={engine}
             room={room}
             initialCode={inviteCode}
+            searching={searching}
+            notice={quickError}
+            onQuick={onQuickMatch}
+            onCancelQuick={cancelQuick}
             onCreate={onCreateRoom}
             onJoin={openRoom}
             onLeave={onLeaveRoom}

@@ -14,6 +14,12 @@ interface DuelLobbyScreenProps {
   initialCode?: string;
   onCreate: () => void;
   onJoin: (code: string) => void;
+  /** Quick match: waiting for a random opponent. */
+  searching: boolean;
+  /** Last quick-match problem, if any. */
+  notice?: string | null;
+  onQuick: () => void;
+  onCancelQuick: () => void;
   onLeave: () => void;
   onStart: (seed: number) => void;
 }
@@ -96,7 +102,7 @@ function RoomView({ engine, room, onLeave, onStart }: { engine: MotionEngine; ro
 }
 
 /** Online duel lobby: create a room or join one by its 4-letter code. */
-export function DuelLobbyScreen({ engine, room, initialCode = '', onCreate, onJoin, onLeave, onStart }: DuelLobbyScreenProps) {
+export function DuelLobbyScreen({ engine, room, initialCode = '', searching, notice = null, onCreate, onJoin, onQuick, onCancelQuick, onLeave, onStart }: DuelLobbyScreenProps) {
   const [code, setCode] = useState(() => normalizeRoomCode(initialCode));
 
   useEffect(() => {
@@ -114,10 +120,22 @@ export function DuelLobbyScreen({ engine, room, initialCode = '', onCreate, onJo
         <h1 className="t-headline">Гонка 1 на 1</h1>
         {room ? (
           <RoomView engine={engine} room={room} onLeave={onLeave} onStart={onStart} />
+        ) : searching ? (
+          <div className="lobby__card">
+            <p className="lobby__searching">Ищем соперника…</p>
+            <p className="lobby__hint">Как только кто-то ещё нажмёт «Быстрая игра», вы окажетесь в одной комнате.</p>
+            <button type="button" className="btn btn--ghost" onClick={onCancelQuick}>
+              Отменить поиск
+            </button>
+          </div>
         ) : (
           <div className="lobby__card">
-            <button type="button" className="btn btn--primary" onClick={onCreate}>
-              <Icon name="users" size={18} /> Создать комнату
+            {notice && <p className="lobby__error">{notice}</p>}
+            <button type="button" className="btn btn--primary" onClick={onQuick}>
+              <Icon name="bolt" size={18} /> Быстрая игра — случайный соперник
+            </button>
+            <button type="button" className="btn btn--ghost" onClick={onCreate}>
+              <Icon name="users" size={18} /> Создать комнату для друга
             </button>
             <form
               className="lobby__join"

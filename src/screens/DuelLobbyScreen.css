@@ -99,6 +99,20 @@
   font-size: 14px;
 }
 
+.lobby__searching {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  color: #ff5ad1;
+  animation: lobby-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes lobby-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
 .lobby__error {
   font-weight: 700;
   color: var(--error);
