@@ -40,11 +40,11 @@ export function LandingScreen({ profile, onStart, onLeaderboard }: LandingScreen
         </h1>
         <p className="t-lead landing__lead">Control the game with your body.</p>
         <p className="landing__body">
-          Встань перед камерой в полный рост и двигайся по-настоящему: прыгай, шагай, приседай. Можно и сидя — игра сама
-          подстроится после калибровки.
+          Встань перед камерой в полный рост и двигайся по-настоящему: перебегай влево-вправо, прыгай, приседай,
+          танцуй. Можно и сидя — игра сама подстроится после калибровки.
         </p>
         <p className="landing__modes">
-          {GAME_MODES.length} режимов · мировой рейтинг · онлайн-дуэль 1 на 1
+          {GAME_MODES.length} режимов · танцпол · игра вдвоём · мировой рейтинг · онлайн-дуэль
         </p>
 
         <motion.button
