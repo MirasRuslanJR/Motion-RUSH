@@ -19,7 +19,7 @@ async function init(message: Extract<WorkerRequest, { type: 'init' }>): Promise<
   if (message.filterLogs) installMediapipeLogFilter();
   try {
     // useModule = true: in a module worker the bundle loads the ES-module WASM loader via import().
-    core = await LandmarkerCore.create(message.sources, true);
+    core = await LandmarkerCore.create(message.sources, true, message.delegate);
     scope.postMessage({ type: 'ready', delegate: core.delegate });
   } catch (error) {
     scope.postMessage({ type: 'init-error', message: error instanceof Error ? error.message : String(error) });
@@ -30,17 +30,18 @@ function detect(message: Extract<WorkerRequest, { type: 'frame' }>): void {
   const { frame, timestamp } = message;
   try {
     const started = performance.now();
-    const poses = core ? core.detect(frame, timestamp) : [];
+    const poses = core ? core.detect(frame, timestamp) : null;
     const inferenceMs = performance.now() - started;
-    const data = packPoses(poses);
+    const data = packPoses(poses ?? []);
     scope.postMessage(
       {
         type: 'result',
         data,
-        count: poses.length,
+        count: poses?.length ?? 0,
         timestamp,
         inferenceMs,
         delegate: core?.delegate ?? 'CPU',
+        skipped: poses === null,
         inputRejected:
           (core?.consecutiveErrors ?? 0) > 0 && typeof VideoFrame !== 'undefined' && frame instanceof VideoFrame,
       },

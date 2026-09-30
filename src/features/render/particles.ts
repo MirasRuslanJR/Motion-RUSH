@@ -1,5 +1,3 @@
-import { rgba } from './palette';
-
 interface Particle {
   x: number;
   y: number;
@@ -74,14 +72,20 @@ export class ParticleSystem {
     if (this.active === 0) return;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
+    // Colour is set only when it changes (bursts are contiguous); fading uses
+    // globalAlpha instead of building an rgba() string per particle per frame.
+    let color = '';
     for (let i = 0; i < this.active; i++) {
       const p = this.pool[i];
       if (!p) continue;
       const t = p.life / p.maxLife;
-      ctx.fillStyle = rgba(p.color, t);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * (0.5 + t * 0.5), 0, Math.PI * 2);
-      ctx.fill();
+      if (p.color !== color) {
+        color = p.color;
+        ctx.fillStyle = color;
+      }
+      ctx.globalAlpha = t;
+      const r = p.size * (0.5 + t * 0.5);
+      ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
     }
     ctx.restore();
   }

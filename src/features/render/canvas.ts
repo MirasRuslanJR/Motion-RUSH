@@ -4,18 +4,29 @@ export interface CanvasSize {
   dpr: number;
 }
 
-/**
- * Keeps a canvas backing store in sync with its CSS size (capped DPR for perf).
- * Resizing happens only on ResizeObserver callbacks, never per frame.
- */
-export function observeCanvas(canvas: HTMLCanvasElement, onResize?: (size: CanvasSize) => void): {
+export interface ObservedCanvas {
   size: CanvasSize;
+  /** Current DPR cap; call setMaxDpr when the quality level changes. */
+  setMaxDpr: (maxDpr: number) => void;
   dispose: () => void;
-} {
+}
+
+/**
+ * Keeps a canvas backing store in sync with its CSS size, with a capped DPR:
+ * on a 2× laptop screen a full-DPR canvas is 4× the pixels to fill every frame,
+ * which is exactly what integrated GPUs struggle with.
+ * Resizing happens only on ResizeObserver callbacks / quality changes, never per frame.
+ */
+export function observeCanvas(
+  canvas: HTMLCanvasElement,
+  onResize?: (size: CanvasSize) => void,
+  initialMaxDpr = 1.5,
+): ObservedCanvas {
   const size: CanvasSize = { width: 0, height: 0, dpr: 1 };
+  let maxDpr = initialMaxDpr;
   const apply = () => {
     const rect = canvas.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
     size.width = Math.max(1, rect.width);
     size.height = Math.max(1, rect.height);
     size.dpr = dpr;
@@ -30,7 +41,15 @@ export function observeCanvas(canvas: HTMLCanvasElement, onResize?: (size: Canva
   apply();
   const observer = new ResizeObserver(apply);
   observer.observe(canvas);
-  return { size, dispose: () => observer.disconnect() };
+  return {
+    size,
+    setMaxDpr: (next) => {
+      if (next === maxDpr) return;
+      maxDpr = next;
+      apply();
+    },
+    dispose: () => observer.disconnect(),
+  };
 }
 
 /** Maps mirrored frame units to canvas pixels for a video shown with object-fit: cover. */

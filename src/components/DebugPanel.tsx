@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { MotionEngine, MotionFrame } from '../features/engine/MotionEngine';
 import { GESTURE_TYPES } from '../features/gestures/types';
 import { useEngineFrame } from '../hooks/useEngine';
@@ -36,14 +36,40 @@ function describe(f: Readonly<MotionFrame>, engine: MotionEngine): string {
   return lines.join('\n');
 }
 
+const FRAME_WINDOW = 180;
+const LONG_TASK_WINDOW_MS = 10000;
+
 /** Developer overlay, only with ?debug=1. Writes text directly, 5×/s. */
 export function DebugPanel({ engine }: { engine: MotionEngine }) {
   const ref = useRef<HTMLPreElement>(null);
   const last = useRef(0);
-  useEngineFrame(engine, (frame) => {
+  const frameTimes = useRef(new Float32Array(FRAME_WINDOW));
+  const frameIndex = useRef(0);
+  const longTasks = useRef<number[]>([]);
+
+  // Main-thread tasks > 50 ms — the direct cause of visible stutter.
+  useEffect(() => {
+    if (typeof PerformanceObserver === 'undefined') return;
+    try {
+      const observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) longTasks.current.push(entry.startTime);
+      });
+      observer.observe({ type: 'longtask', buffered: false });
+      return () => observer.disconnect();
+    } catch {
+      return undefined;
+    }
+  }, []);
+
+  useEngineFrame(engine, (frame, dt) => {
+    frameTimes.current[frameIndex.current++ % FRAME_WINDOW] = dt;
     if (frame.time - last.current < 200 || !ref.current) return;
     last.current = frame.time;
-    ref.current.textContent = describe(frame, engine);
+    const sorted = [...frameTimes.current].filter((v) => v > 0).sort((a, b) => a - b);
+    const p95 = sorted[Math.floor(sorted.length * 0.95)] ?? 0;
+    const since = performance.now() - LONG_TASK_WINDOW_MS;
+    longTasks.current = longTasks.current.filter((t) => t >= since);
+    ref.current.textContent = `${describe(frame, engine)}\nrender ${frame.renderLevel} (dpr ≤ ${frame.render.maxDpr}) · frame p95 ${n(p95, 1)} ms · long tasks/10s ${longTasks.current.length}`;
   });
   return <pre ref={ref} className="debug-panel" aria-hidden="true" />;
 }

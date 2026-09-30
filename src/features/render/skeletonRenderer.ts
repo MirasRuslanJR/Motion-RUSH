@@ -1,4 +1,4 @@
-import { distance, midpoint, type Point } from '../../lib/math/geometry';
+import { distance, type Point } from '../../lib/math/geometry';
 import { LM, lm, SKELETON_BONES, SKELETON_JOINTS, type Pose } from '../tracking/landmarks';
 import { PALETTE, rgba } from './palette';
 
@@ -14,14 +14,18 @@ export type SkeletonTone = 'tracking' | 'success' | 'ghost' | 'dim';
 
 export interface SkeletonDrawOptions {
   tone: SkeletonTone;
-  /** Joints of the active gesture, drawn brighter. */
-  highlight?: readonly number[];
+  /** Joints of the active gesture, drawn brighter. Pass a cached Set (no per-frame allocation). */
+  highlight?: ReadonlySet<number>;
   /** Joints the error-mode hint refers to, drawn pulsing warm. */
-  errorJoints?: readonly number[];
+  errorJoints?: ReadonlySet<number>;
   /** 0..1 looping phase for pulses. */
   pulse?: number;
   alpha?: number;
+  /** Soft wide glow pass under the bones (skipped on low render quality). */
+  glow?: boolean;
 }
+
+const NONE: ReadonlySet<number> = new Set();
 
 const ARM_JOINTS = new Set<number>([
   LM.LEFT_SHOULDER,
@@ -50,17 +54,20 @@ export function drawSkeleton(ctx: CanvasRenderingContext2D, pose: Pose, p: Proje
   const rs = lm(pose, LM.RIGHT_SHOULDER);
   const unit = Math.max(p.len(distance(ls, rs)), 8);
   const width = Math.max(2, unit * 0.055);
-  const highlight = new Set(opts.highlight ?? []);
-  const errors = new Set(opts.errorJoints ?? []);
+  const highlight = opts.highlight ?? NONE;
+  const errors = opts.errorJoints ?? NONE;
   const ghost = opts.tone === 'ghost';
+  const glow = (opts.glow ?? true) && !ghost;
 
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   if (ghost) ctx.setLineDash([width * 2.2, width * 1.8]);
 
-  // Bones: soft wide glow pass + crisp core pass.
-  for (const pass of ghost ? [1] : [0, 1]) {
+  // Bones: optional soft wide glow pass + crisp core pass.
+  // Colours are plain hex strings; transparency goes through globalAlpha
+  // (no rgba() string building per bone per frame).
+  for (let pass = glow ? 0 : 1; pass < 2; pass++) {
     ctx.globalCompositeOperation = pass === 0 ? 'lighter' : 'source-over';
     for (const [ia, ib] of SKELETON_BONES) {
       const a = lm(pose, ia);
@@ -69,13 +76,13 @@ export function drawSkeleton(ctx: CanvasRenderingContext2D, pose: Pose, p: Proje
       if (vis < 0.25) continue;
       const lit = highlight.has(ia) && highlight.has(ib);
       const err = errors.has(ia) && errors.has(ib);
-      const color = err ? PALETTE.error : lit && opts.tone !== 'success' ? PALETTE.cyan : boneColor(ia, ib, opts.tone);
+      ctx.strokeStyle = err ? PALETTE.error : lit && opts.tone !== 'success' ? PALETTE.cyan : boneColor(ia, ib, opts.tone);
       const visAlpha = vis < 0.5 ? 0.3 : 1;
       if (pass === 0) {
-        ctx.strokeStyle = rgba(color, 0.16 * alpha * visAlpha * (lit || err ? 1.8 : 1));
+        ctx.globalAlpha = 0.16 * alpha * visAlpha * (lit || err ? 1.8 : 1);
         ctx.lineWidth = width * (lit || err ? 4.2 : 3.2);
       } else {
-        ctx.strokeStyle = rgba(color, (ghost ? 0.6 : 0.95) * alpha * visAlpha * (opts.tone === 'dim' ? 0.45 : 1));
+        ctx.globalAlpha = (ghost ? 0.6 : 0.95) * alpha * visAlpha * (opts.tone === 'dim' ? 0.45 : 1);
         ctx.lineWidth = width * (lit || err ? 1.35 : 1);
       }
       ctx.beginPath();
@@ -89,39 +96,46 @@ export function drawSkeleton(ctx: CanvasRenderingContext2D, pose: Pose, p: Proje
   // Head ring anchored between the eyes and the nose.
   const nose = lm(pose, LM.NOSE);
   if (nose.v > 0.3) {
-    const headCenter = midpoint(nose, midpoint(lm(pose, LM.LEFT_EYE), lm(pose, LM.RIGHT_EYE)));
-    const headErr = errors.has(LM.NOSE);
-    ctx.strokeStyle = rgba(headErr ? PALETTE.error : opts.tone === 'success' ? PALETTE.success : PALETTE.white, (ghost ? 0.5 : 0.85) * alpha);
+    const le = lm(pose, LM.LEFT_EYE);
+    const re = lm(pose, LM.RIGHT_EYE);
+    const hx = (nose.x + (le.x + re.x) / 2) / 2;
+    const hy = (nose.y + (le.y + re.y) / 2) / 2;
+    ctx.strokeStyle = errors.has(LM.NOSE) ? PALETTE.error : opts.tone === 'success' ? PALETTE.success : PALETTE.white;
+    ctx.globalAlpha = (ghost ? 0.5 : 0.85) * alpha;
     ctx.lineWidth = width;
     ctx.beginPath();
-    ctx.arc(p.x(headCenter.x), p.y(headCenter.y), unit * 0.3, 0, Math.PI * 2);
+    ctx.arc(p.x(hx), p.y(hy), unit * 0.3, 0, Math.PI * 2);
     ctx.stroke();
   }
   ctx.setLineDash([]);
 
   // Joints.
+  const r = width * (ghost ? 1.1 : 1.35);
   for (const index of SKELETON_JOINTS) {
     const j = lm(pose, index);
     if (j.v < 0.35) continue;
     const x = p.x(j.x);
     const y = p.y(j.y);
-    const r = width * (ghost ? 1.1 : 1.35);
     if (errors.has(index)) {
-      const pr = r * (2.4 + Math.sin(pulse * Math.PI * 2) * 0.9);
-      ctx.strokeStyle = rgba(PALETTE.error, 0.9 * alpha);
+      ctx.strokeStyle = PALETTE.error;
+      ctx.globalAlpha = 0.9 * alpha;
       ctx.lineWidth = Math.max(1.5, r * 0.45);
       ctx.beginPath();
-      ctx.arc(x, y, pr, 0, Math.PI * 2);
+      ctx.arc(x, y, r * (2.4 + Math.sin(pulse * Math.PI * 2) * 0.9), 0, Math.PI * 2);
       ctx.stroke();
-      ctx.fillStyle = rgba(PALETTE.error, alpha);
+      ctx.fillStyle = PALETTE.error;
+      ctx.globalAlpha = alpha;
     } else if (highlight.has(index)) {
-      ctx.fillStyle = rgba(opts.tone === 'success' ? PALETTE.success : PALETTE.cyan, 0.25 * alpha);
+      ctx.fillStyle = opts.tone === 'success' ? PALETTE.success : PALETTE.cyan;
+      ctx.globalAlpha = 0.25 * alpha;
       ctx.beginPath();
       ctx.arc(x, y, r * 2.6, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = rgba(PALETTE.white, alpha);
+      ctx.fillStyle = PALETTE.white;
+      ctx.globalAlpha = alpha;
     } else {
-      ctx.fillStyle = rgba(ghost ? PALETTE.white : PALETTE.white, (ghost ? 0.55 : 0.9) * alpha);
+      ctx.fillStyle = PALETTE.white;
+      ctx.globalAlpha = (ghost ? 0.55 : 0.9) * alpha;
     }
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -177,31 +191,34 @@ export class MotionTrail {
 
   /** Record screen-space positions (call once per rendered frame). */
   push(pose: Pose, p: Projector): void {
-    this.joints.forEach((index, j) => {
+    for (let j = 0; j < this.joints.length; j++) {
       const slot = this.history[j]?.[this.cursor];
-      const point = pose[index];
-      if (!slot || !point) return;
+      const point = pose[this.joints[j] ?? 0];
+      if (!slot || !point) continue;
       slot.x = p.x(point.x);
       slot.y = p.y(point.y);
-    });
+    }
     this.cursor = (this.cursor + 1) % this.length;
     this.filled = Math.min(this.filled + 1, this.length);
   }
 
-  draw(ctx: CanvasRenderingContext2D, color: string, width: number, alpha = 1): void {
-    if (this.filled < 3) return;
+  /** Draws up to `samples` most recent positions (fewer on low render quality). */
+  draw(ctx: CanvasRenderingContext2D, color: string, width: number, alpha = 1, samples = this.length): void {
+    const count = Math.min(this.filled, samples);
+    if (count < 3) return;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
+    ctx.strokeStyle = color;
     for (const points of this.history) {
-      for (let k = 1; k < this.filled; k++) {
-        const i0 = (this.cursor - this.filled + k - 1 + this.length * 2) % this.length;
-        const i1 = (this.cursor - this.filled + k + this.length * 2) % this.length;
+      for (let k = 1; k < count; k++) {
+        const i0 = (this.cursor - count + k - 1 + this.length * 2) % this.length;
+        const i1 = (this.cursor - count + k + this.length * 2) % this.length;
         const a = points[i0];
         const b = points[i1];
         if (!a || !b) continue;
-        const t = k / this.filled;
-        ctx.strokeStyle = rgba(color, 0.5 * t * alpha);
+        const t = k / count;
+        ctx.globalAlpha = 0.5 * t * alpha;
         ctx.lineWidth = width * (0.3 + t);
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);

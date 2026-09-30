@@ -9,8 +9,12 @@ export const TRACKING_CONFIG = {
     'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task',
   wasmCdnBase: 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm',
 
-  /** Detect up to 2 people so we can warn "one player only" instead of silently switching. */
-  numPoses: 2,
+  /**
+   * One pose: MediaPipe then tracks the same person frame to frame and mostly skips
+   * the person detector — ~35% faster inference than numPoses: 2 on integrated GPUs.
+   * Set to 2 to re-enable the "one player only" warning (poseSelection handles it).
+   */
+  numPoses: 1,
   minPoseDetectionConfidence: 0.5,
   minPosePresenceConfidence: 0.5,
   minTrackingConfidence: 0.5,
@@ -38,8 +42,18 @@ export const TRACKING_CONFIG = {
     enabled: true,
     /** Model download + init budget before falling back to the main thread. */
     initTimeoutMs: 45000,
-    /** A frame whose result has not come back in this time is dropped. */
-    resultTimeoutMs: 2000,
+    /**
+     * Safety net only: the worker answers every frame (even "skipped"), and the
+     * first GPU inference can take seconds while shaders compile. A short timeout
+     * would just queue more frames behind that warm-up.
+     */
+    resultTimeoutMs: 10000,
+    /**
+     * Delegate inside the worker. CPU: smooth from the first second. The GPU delegate
+     * compiles shaders on first use (10+ s on integrated GPUs) and stalls the page
+     * meanwhile. Override per session with ?delegate=gpu.
+     */
+    delegate: 'CPU' as 'CPU' | 'GPU',
   },
 
   /** Keep the last pose this long when landmarks drop out for a moment. */

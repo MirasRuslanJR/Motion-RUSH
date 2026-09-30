@@ -50,19 +50,32 @@ function layout(w: number, h: number): Geometry {
   return { w, h, horizonY: h * (portrait ? 0.24 : 0.3), groundY: h * (portrait ? 0.66 : 0.9), vx: w / 2, laneW };
 }
 
+const FLOATER_MS = 900;
+const TRAIL_POINTS = 4; // head, both hands, hips
+const TRAIL_CAPACITY = 12;
+const TRACK_EDGES = [-1.5, -0.5, 0.5, 1.5] as const;
+
 /**
  * Canvas renderer for the runner scene. Reads game + motion state, owns only
  * cosmetic state (smoothing, particles, flashes). Never mutates the game.
+ *
+ * Two layers: a static background canvas (sky, stars, horizon) redrawn only on
+ * resize, and a transparent dynamic canvas redrawn every frame — so the GPU does
+ * not re-blit a full-screen image 60 times per second.
  */
 export class GameRenderer {
   private readonly ctx: CanvasRenderingContext2D | null;
   private readonly sizing: ReturnType<typeof observeCanvas>;
-  private background: HTMLCanvasElement | null = null;
+  private readonly backgroundSizing: ReturnType<typeof observeCanvas>;
+  private readonly backgroundCtx: CanvasRenderingContext2D | null;
   private readonly particles = new ParticleSystem();
   private readonly itemFx = new Map<number, ItemFx>();
   private readonly floaters: Floater[] = [];
   private readonly fallbackPose: Pose = createPose();
-  private readonly trail: Point[][] = [[], [], [], []];
+  /** Ring buffer of screen positions: [point][sample] → x, y. */
+  private readonly trail = new Float32Array(TRAIL_POINTS * TRAIL_CAPACITY * 2);
+  private trailCursor = 0;
+  private trailCount = 0;
   private laneVisual = 0;
   private jumpVisual = 0;
   private duckVisual = 0;
@@ -73,20 +86,24 @@ export class GameRenderer {
   private comboRingAt = -1;
   private avatarChest: Point = { x: 0, y: 0 };
   private reducedMotion = false;
+  /** Soft glow passes (off on the lowest quality level). */
+  private glow = true;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, background: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d');
-    this.sizing = observeCanvas(canvas, (size) => this.buildBackground(size));
+    this.sizing = observeCanvas(canvas);
+    this.backgroundCtx = background.getContext('2d', { alpha: false });
+    // Soft gradients and 1-px stars do not need retina resolution.
+    this.backgroundSizing = observeCanvas(background, (size) => this.drawBackground(size), 1);
   }
 
   setReducedMotion(reduced: boolean): void {
     this.reducedMotion = reduced;
-    this.particles.intensity = reduced ? 0.35 : 1;
   }
 
   dispose(): void {
     this.sizing.dispose();
-    this.background = null;
+    this.backgroundSizing.dispose();
   }
 
   private geometry(): Geometry {
@@ -150,9 +167,13 @@ export class GameRenderer {
     }
   }
 
-  render(game: GameEngine, frame: Readonly<MotionFrame> | null, dtMs: number, now: number): void {
+  render(game: GameEngine, frame: Readonly<MotionFrame>, dtMs: number, now: number): void {
     const ctx = this.ctx;
     if (!ctx) return;
+    const quality = frame.render;
+    this.sizing.setMaxDpr(quality.maxDpr);
+    this.glow = quality.glow;
+    this.particles.intensity = (this.reducedMotion ? 0.35 : 1) * quality.particles;
     const { dpr } = this.sizing.size;
     const g = this.geometry();
     const running = game.phase === 'running';
@@ -173,17 +194,25 @@ export class GameRenderer {
       const a = ((this.shakeUntil - now) / 280) * 7;
       ctx.translate(Math.sin(now * 0.09) * a, Math.cos(now * 0.11) * a * 0.6);
     }
-    if (this.background) ctx.drawImage(this.background, 0, 0, g.w, g.h);
     this.drawTrack(ctx, g);
 
-    const visible = game.course
-      .map((item) => ({ item, z: this.itemZ(item, game.time) }))
-      .filter(({ item, z }) => z <= Z_FAR && z > -0.9 && !(item.kind === 'ORB' && this.itemFx.has(item.id)))
-      .sort((a, b) => b.z - a.z);
-
-    for (const { item, z } of visible) if (z > 0) this.drawItem(ctx, g, item, z, now, game.nextRequired?.id === item.id);
-    this.drawRunner(ctx, g, game, frame, now);
-    for (const { item, z } of visible) if (z <= 0) this.drawItem(ctx, g, item, z, now, false);
+    // The course is sorted by arrival, so walking it backwards goes far → near:
+    // correct painter's order with no per-frame arrays or sorting.
+    const course = game.course;
+    const nextId = game.nextRequired?.id ?? -1;
+    for (let i = course.length - 1; i >= 0; i--) {
+      const item = course[i];
+      if (!item || !this.itemVisible(item)) continue;
+      const z = this.itemZ(item, game.time);
+      if (z > 0 && z <= Z_FAR) this.drawItem(ctx, g, item, z, now, item.id === nextId);
+    }
+    this.drawRunner(ctx, g, game, frame, now, quality.trailLength);
+    for (let i = course.length - 1; i >= 0; i--) {
+      const item = course[i];
+      if (!item || !this.itemVisible(item)) continue;
+      const z = this.itemZ(item, game.time);
+      if (z <= 0 && z > -0.9) this.drawItem(ctx, g, item, z, now, false);
+    }
 
     this.particles.draw(ctx);
     this.drawFloaters(ctx, now);
@@ -200,13 +229,15 @@ export class GameRenderer {
     }
   }
 
-  private buildBackground(size: CanvasSize): void {
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(size.width * size.dpr);
-    canvas.height = Math.round(size.height * size.dpr);
-    const ctx = canvas.getContext('2d');
+  /** Collected orbs disappear; everything else stays visible while in range. */
+  private itemVisible(item: CourseItem): boolean {
+    return !(item.kind === 'ORB' && this.itemFx.has(item.id));
+  }
+
+  private drawBackground(size: CanvasSize): void {
+    const ctx = this.backgroundCtx;
     if (!ctx) return;
-    ctx.scale(size.dpr, size.dpr);
+    ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
     const w = size.width;
     const h = size.height;
     const horizon = layout(w, h).horizonY;
@@ -241,12 +272,11 @@ export class GameRenderer {
     ctx.moveTo(0, horizon);
     ctx.lineTo(w, horizon);
     ctx.stroke();
-    this.background = canvas;
   }
 
   private drawTrack(ctx: CanvasRenderingContext2D, g: Geometry): void {
     const zNear = -0.6;
-    const edges = [-1.5, -0.5, 0.5, 1.5];
+    const edges = TRACK_EDGES;
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(this.laneX(g, -1.5, Z_FAR), this.groundY(g, Z_FAR));
@@ -316,10 +346,8 @@ export class GameRenderer {
             this.drawChevron(ctx, (x0 + x1) / 2, top - unit * 0.28, unit * 0.22, item.lane === 0 ? 'down' : item.lane < 0 ? 'left' : 'right', tint ?? PALETTE.cyan, isNext);
             continue;
           }
-          const wall = ctx.createLinearGradient(0, top, 0, baseY);
-          wall.addColorStop(0, rgba(tint ?? PALETTE.violet, 0.55));
-          wall.addColorStop(1, rgba(tint ?? PALETTE.violet, 0.18));
-          ctx.fillStyle = wall;
+          // Flat translucent fill (a per-wall gradient every frame is wasted work on weak GPUs).
+          ctx.fillStyle = rgba(tint ?? PALETTE.violet, 0.34);
           ctx.fillRect(x0, top, x1 - x0, baseY - top);
           ctx.strokeStyle = rgba(tint ?? PALETTE.violet, 1);
           ctx.lineWidth = Math.max(1.5, unit * 0.035);
@@ -373,10 +401,12 @@ export class GameRenderer {
         const y = baseY - unit * 0.5;
         const r = unit * (0.11 + Math.sin(now / 160) * 0.015);
         ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = rgba(PALETTE.cyan, 0.2);
-        ctx.beginPath();
-        ctx.arc(x, y, r * 2.4, 0, Math.PI * 2);
-        ctx.fill();
+        if (this.glow) {
+          ctx.fillStyle = rgba(PALETTE.cyan, 0.2);
+          ctx.beginPath();
+          ctx.arc(x, y, r * 2.4, 0, Math.PI * 2);
+          ctx.fill();
+        }
         ctx.fillStyle = rgba(PALETTE.white, 0.95);
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -391,12 +421,14 @@ export class GameRenderer {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
-    ctx.strokeStyle = rgba(color, 0.25);
-    ctx.lineWidth = thickness * 4;
     ctx.beginPath();
     ctx.moveTo(x0, y);
     ctx.lineTo(x1, y);
-    ctx.stroke();
+    if (this.glow) {
+      ctx.strokeStyle = rgba(color, 0.25);
+      ctx.lineWidth = thickness * 4;
+      ctx.stroke();
+    }
     ctx.strokeStyle = rgba(color, 0.9);
     ctx.lineWidth = thickness * 1.4;
     ctx.stroke();
@@ -432,16 +464,23 @@ export class GameRenderer {
   }
 
   /** Runner = the player's real upper body (from the camera) on stylised running legs. */
-  private drawRunner(ctx: CanvasRenderingContext2D, g: Geometry, game: GameEngine, frame: Readonly<MotionFrame> | null, now: number): void {
+  private drawRunner(
+    ctx: CanvasRenderingContext2D,
+    g: Geometry,
+    game: GameEngine,
+    frame: Readonly<MotionFrame>,
+    now: number,
+    trailSamples: number,
+  ): void {
     const px = g.laneW * AVATAR_UNIT;
     const groundY = this.groundY(g, 0);
     const jump = this.jumpVisual * g.laneW * 0.62;
     const legLen = lerp(LEG_STAND, LEG_DUCK, this.duckVisual);
     const hip: Point = { x: this.laneX(g, this.laneVisual, 0), y: groundY - legLen * px - jump };
 
-    // Upper body source: live pose relative to a hip reference, else a synthetic figure.
-    const pose = frame?.pose;
-    const baseline = frame?.baseline;
+    // Upper body source: live (display-smoothed) pose relative to a hip reference, else a synthetic figure.
+    const pose = frame.displayPose;
+    const baseline = frame.baseline;
     let src: Pose;
     let hipRef: Point;
     let scale: number;
@@ -487,32 +526,9 @@ export class GameRenderer {
     const sc = midpoint(ls, rs);
     this.avatarChest = { x: (sc.x + hip.x) / 2, y: (sc.y + hip.y) / 2 };
 
-    // Motion trail: head, both hands, hips.
-    const heads: Point[] = [nose, lw, rw, hip];
-    heads.forEach((p, i) => {
-      const list = this.trail[i];
-      if (!list) return;
-      list.push({ x: p.x, y: p.y });
-      if (list.length > 12) list.shift();
-    });
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.lineCap = 'round';
-    for (const list of this.trail) {
-      for (let i = 1; i < list.length; i++) {
-        const a = list[i - 1];
-        const b = list[i];
-        if (!a || !b) continue;
-        const t = i / list.length;
-        ctx.strokeStyle = rgba(bodyColor, 0.35 * t);
-        ctx.lineWidth = px * 0.18 * t;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
+    // Motion trail (head, both hands, hips) in a preallocated ring buffer.
+    this.pushTrail(nose, lw, rw, hip);
+    this.drawTrail(ctx, bodyColor, px * 0.18, trailSamples);
 
     // Legs (stylised run cycle; tucked in the air, bent when ducking).
     const phase = (game.time / 300) * Math.PI * 2;
@@ -528,14 +544,17 @@ export class GameRenderer {
       return [hipJ, knee, foot];
     });
 
+    const glow = this.glow;
     const bone = (a: Point, b: Point, color: string, width: number) => {
-      ctx.strokeStyle = rgba(color, 0.22);
-      ctx.lineWidth = width * 3;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-      ctx.strokeStyle = rgba(color, 1);
+      if (glow) {
+        ctx.strokeStyle = rgba(color, 0.22);
+        ctx.lineWidth = width * 3;
+        ctx.stroke();
+      }
+      ctx.strokeStyle = color;
       ctx.lineWidth = width;
       ctx.stroke();
     };
@@ -572,26 +591,65 @@ export class GameRenderer {
     ctx.restore();
   }
 
-  private drawFloaters(ctx: CanvasRenderingContext2D, now: number): void {
+  private pushTrail(...points: Point[]): void {
+    const base = this.trailCursor * TRAIL_POINTS * 2;
+    for (let i = 0; i < TRAIL_POINTS; i++) {
+      const p = points[i];
+      if (!p) continue;
+      this.trail[base + i * 2] = p.x;
+      this.trail[base + i * 2 + 1] = p.y;
+    }
+    this.trailCursor = (this.trailCursor + 1) % TRAIL_CAPACITY;
+    this.trailCount = Math.min(this.trailCount + 1, TRAIL_CAPACITY);
+  }
+
+  private drawTrail(ctx: CanvasRenderingContext2D, color: string, width: number, samples: number): void {
+    const count = Math.min(this.trailCount, samples);
+    if (count < 2) return;
     ctx.save();
-    ctx.textAlign = 'center';
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = color;
+    const slot = (k: number) => ((this.trailCursor - count + k + TRAIL_CAPACITY * 2) % TRAIL_CAPACITY) * TRAIL_POINTS * 2;
+    for (let i = 0; i < TRAIL_POINTS; i++) {
+      for (let k = 1; k < count; k++) {
+        const a = slot(k - 1) + i * 2;
+        const b = slot(k) + i * 2;
+        const t = k / count;
+        ctx.globalAlpha = 0.35 * t;
+        ctx.lineWidth = width * t;
+        ctx.beginPath();
+        ctx.moveTo(this.trail[a] ?? 0, this.trail[a + 1] ?? 0);
+        ctx.lineTo(this.trail[b] ?? 0, this.trail[b + 1] ?? 0);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  private drawFloaters(ctx: CanvasRenderingContext2D, now: number): void {
     for (let i = this.floaters.length - 1; i >= 0; i--) {
       const f = this.floaters[i];
-      if (!f) continue;
-      const age = (now - f.born) / 900;
-      if (age >= 1) {
-        this.floaters.splice(i, 1);
-        continue;
-      }
-      const y = f.y - age * 40;
+      if (f && now - f.born >= FLOATER_MS) this.floaters.splice(i, 1);
+    }
+    if (this.floaters.length === 0) return;
+    ctx.save();
+    ctx.textAlign = 'center';
+    // Two passes so each font string is parsed once per frame, not once per label.
+    ctx.font = '800 22px Unbounded, system-ui, sans-serif';
+    for (const f of this.floaters) {
+      const age = (now - f.born) / FLOATER_MS;
       ctx.globalAlpha = 1 - age * age;
       ctx.fillStyle = f.color;
-      ctx.font = '800 22px Unbounded, system-ui, sans-serif';
-      ctx.fillText(f.text, f.x, y);
-      if (f.sub) {
-        ctx.font = '600 11px "JetBrains Mono", ui-monospace, monospace';
-        ctx.fillText(f.sub, f.x, y + 16);
-      }
+      ctx.fillText(f.text, f.x, f.y - age * 40);
+    }
+    ctx.font = '600 11px "JetBrains Mono", ui-monospace, monospace';
+    for (const f of this.floaters) {
+      if (!f.sub) continue;
+      const age = (now - f.born) / FLOATER_MS;
+      ctx.globalAlpha = 1 - age * age;
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.sub, f.x, f.y - age * 40 + 16);
     }
     ctx.restore();
   }

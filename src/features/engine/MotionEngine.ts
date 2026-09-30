@@ -1,3 +1,4 @@
+import { RENDER_CONFIG, type QualityLevel, type QualitySettings } from '../../config/render.config';
 import { TRACKING_CONFIG } from '../../config/tracking.config';
 import { Store } from '../../lib/store';
 import { Debounced, RateMeter } from '../../lib/timing';
@@ -15,6 +16,7 @@ import { assessFrame, isTrackable, NO_BODY_QUALITY, trackingMessage, type FrameQ
 import { normalizeLandmarks } from '../tracking/LandmarkNormalizer';
 import { copyPoseInto, createPose, type Pose } from '../tracking/landmarks';
 import type { Delegate } from '../tracking/landmarkerCore';
+import { QualityGovernor } from '../render/quality';
 import { MotionSmoother } from '../tracking/MotionSmoother';
 import { loadPoseBackend, type PoseBackend, type PoseCallbacks, type PoseResult } from '../tracking/poseBackend';
 import { selectPrimaryPose } from '../tracking/poseSelection';
@@ -46,7 +48,10 @@ export interface MotionFrame {
   aspect: number;
   videoWidth: number;
   videoHeight: number;
+  /** Latest recognised pose (updates at the inference rate) — used by all logic. */
   pose: Pose | null;
+  /** The same pose eased every display frame — for drawing only. */
+  displayPose: Pose | null;
   quality: FrameQuality;
   trackable: boolean;
   features: BodyFeatures | null;
@@ -57,6 +62,9 @@ export interface MotionFrame {
   diagnosis: Diagnosis | null;
   target: Pose | null;
   baseline: Baseline | null;
+  /** Adaptive rendering quality for this frame (see QualityGovernor). */
+  render: QualitySettings;
+  renderLevel: QualityLevel;
   stats: { fps: number; inferenceFps: number; inferenceMs: number; targetInferenceFps: number };
 }
 
@@ -98,6 +106,7 @@ function summary(f: BodyFeatures | null): GestureEventFeatures | null {
 export class MotionEngine {
   readonly ui = new Store<MotionUiState>(INITIAL_UI);
   readonly frame: MotionFrame;
+  private readonly quality = new QualityGovernor();
 
   private readonly camera = new CameraSource();
   private readonly smoother = new MotionSmoother();
@@ -110,6 +119,7 @@ export class MotionEngine {
 
   private readonly rawPose = createPose();
   private readonly poseBuffer = createPose();
+  private readonly displayBuffer = createPose();
   private readonly targetBuffer = createPose();
   private readonly status = new Debounced<TrackingStatus>('NO_BODY', TRACKING_CONFIG.statusDebounceMs);
   private readonly fpsMeter = new RateMeter();
@@ -147,6 +157,7 @@ export class MotionEngine {
       videoWidth: 0,
       videoHeight: 0,
       pose: null,
+      displayPose: null,
       quality: NO_BODY_QUALITY,
       trackable: false,
       features: null,
@@ -157,6 +168,8 @@ export class MotionEngine {
       diagnosis: null,
       target: null,
       baseline: null,
+      render: this.quality.settings,
+      renderLevel: this.quality.level,
       stats: { fps: 0, inferenceFps: 0, inferenceMs: 0, targetInferenceFps: this.targetFps },
     };
   }
@@ -247,20 +260,52 @@ export class MotionEngine {
   private readonly tick = (now: number): void => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.tick);
+    const frameMs = this.lastTick ? now - this.lastTick : 16;
     // Clamp so a long stall (tab switch, GC) cannot teleport the game forward.
-    const dt = this.lastTick ? Math.min(now - this.lastTick, 250) : 16;
+    const dt = Math.min(frameMs, 250);
     this.lastTick = now;
     this.fpsMeter.tick(now);
+    if (this.quality.update(frameMs)) {
+      this.frame.render = this.quality.settings;
+      this.frame.renderLevel = this.quality.level;
+    }
 
     this.frame.time = now;
     if (this.shouldInfer(now)) this.requestInference(now);
     // Worker results arrive between frames; the main-thread backend answers inside requestInference.
     this.frame.inferred = this.resultArrived;
     this.resultArrived = false;
+    this.easeDisplayPose(dt);
 
     this.frame.stats.fps = this.fpsMeter.rate;
     for (const listener of this.frameListeners) listener(this.frame, dt);
   };
+
+  /** Glide the drawn pose toward the latest recognised one (frame-rate independent). */
+  private easeDisplayPose(dt: number): void {
+    const f = this.frame;
+    const target = f.pose;
+    if (!target) {
+      f.displayPose = null;
+      return;
+    }
+    const display = this.displayBuffer;
+    if (!f.displayPose) {
+      copyPoseInto(target, display);
+      f.displayPose = display;
+      return;
+    }
+    const a = 1 - Math.exp(-dt / RENDER_CONFIG.displaySmoothingMs);
+    for (let i = 0; i < target.length; i++) {
+      const t = target[i];
+      const d = display[i];
+      if (!t || !d) continue;
+      d.x += (t.x - d.x) * a;
+      d.y += (t.y - d.y) * a;
+      d.z = t.z;
+      d.v = t.v;
+    }
+  }
 
   private shouldInfer(now: number): boolean {
     const video = this.camera.video;

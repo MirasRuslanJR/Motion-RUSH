@@ -133,6 +133,7 @@ interface GameScreenProps {
 export function GameScreen({ engine, onFinish }: GameScreenProps) {
   const [game] = useState(() => new GameEngine(generateCourse()));
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const backgroundRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<GameRenderer | null>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const resumeRef = useRef<SVGCircleElement>(null);
@@ -147,8 +148,9 @@ export function GameScreen({ engine, onFinish }: GameScreenProps) {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const renderer = new GameRenderer(canvas);
+    const background = backgroundRef.current;
+    if (!canvas || !background) return;
+    const renderer = new GameRenderer(canvas, background);
     rendererRef.current = renderer;
     return () => {
       renderer.dispose();
@@ -221,6 +223,7 @@ export function GameScreen({ engine, onFinish }: GameScreenProps) {
   return (
     <main className="screen game">
       <section className="game__stage" aria-label="Игровое поле">
+        <canvas ref={backgroundRef} className="game__canvas" aria-hidden="true" />
         <canvas ref={canvasRef} className="game__canvas" aria-hidden="true" />
 
         <div className="hud">

@@ -15,10 +15,10 @@ const GESTURE_PARTS: Record<GestureType, BodyPart[]> = {
   CROUCH: ['hips', 'legs'],
 };
 
-function joints(parts: readonly BodyPart[]): number[] {
+function jointSet(parts: readonly BodyPart[]): Set<number> {
   const out = new Set<number>();
   for (const part of parts) for (const j of BODY_PART_JOINTS[part]) out.add(j);
-  return [...out];
+  return out;
 }
 
 export interface OverlayOptions {
@@ -32,6 +32,10 @@ export interface OverlayOptions {
  * Draws on top of the mirrored camera feed: the live skeleton, gesture
  * highlights, and — in error mode — the ghost target pose, threshold lines
  * and arrows from the current joint to where it must go.
+ *
+ * Draws the display-smoothed pose (eased every frame toward the latest
+ * inference) at a quality-dependent cadence: 60 fps on capable machines,
+ * 30 fps when the governor has stepped quality down.
  */
 export class CameraOverlayRenderer {
   private readonly ctx: CanvasRenderingContext2D | null;
@@ -43,6 +47,15 @@ export class CameraOverlayRenderer {
     y: (v) => mapY(v, this.mapping),
     len: (v) => mapLen(v, this.mapping),
   };
+  private lastDrawAt = -Infinity;
+  private cleared = true;
+  private lastWidth = 0;
+  private lastHeight = 0;
+  private lastDpr = 0;
+  private highlightKey = '';
+  private highlight: Set<number> = new Set();
+  private errorKey = '';
+  private errorJoints: Set<number> = new Set();
 
   constructor(canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d');
@@ -56,29 +69,41 @@ export class CameraOverlayRenderer {
   render(frame: Readonly<MotionFrame>, now: number, opts: OverlayOptions): void {
     const ctx = this.ctx;
     if (!ctx) return;
+    this.sizing.setMaxDpr(frame.render.maxDpr);
     const { width, height, dpr } = this.sizing.size;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-    const pose = frame.pose;
+    const pose = frame.displayPose;
+
     if (!pose) {
+      if (!this.cleared) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+        this.cleared = true;
+      }
       this.trail.clear();
       return;
     }
-    this.mapping = coverMapping(width, height, frame.videoWidth, frame.videoHeight);
-    const pulse = (now % 900) / 900;
 
     const diagnosis = frame.diagnosis;
     const errorMode = opts.guidance && diagnosis !== null && isErrorVerdict(diagnosis.verdict);
-    const success = diagnosis?.verdict === 'correct';
+    // A backing-store resize (CSS size or DPR change) wipes the canvas, so it forces a redraw.
+    const resized = width !== this.lastWidth || height !== this.lastHeight || dpr !== this.lastDpr;
+    // Otherwise redraw at the quality level's cadence (60 fps high, 30 fps medium/low).
+    if (!resized && now - this.lastDrawAt < frame.render.overlayIntervalMs - 1) return;
+    this.lastDrawAt = now;
+    this.lastWidth = width;
+    this.lastHeight = height;
+    this.lastDpr = dpr;
+    this.cleared = false;
 
-    const highlight: BodyPart[] = [];
-    if (frame.lateral.phase === 'CONFIRMED' && frame.lateral.gesture) highlight.push(...GESTURE_PARTS[frame.lateral.gesture]);
-    if (frame.vertical.phase === 'CONFIRMED' && frame.vertical.gesture) highlight.push(...GESTURE_PARTS[frame.vertical.gesture]);
-    if (diagnosis && diagnosis.verdict === 'idle' && opts.guidance) highlight.push(...diagnosis.focus);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    this.mapping = coverMapping(width, height, frame.videoWidth, frame.videoHeight);
+    const success = diagnosis?.verdict === 'correct';
+    this.updateJointSets(frame, opts.guidance);
 
     if (opts.trail) {
       this.trail.push(pose, this.projector);
-      this.trail.draw(ctx, success ? PALETTE.success : PALETTE.cyan, Math.max(2, this.projector.len(0.006)));
+      this.trail.draw(ctx, success ? PALETTE.success : PALETTE.cyan, Math.max(2, this.projector.len(0.006)), 1, frame.render.trailLength);
     }
 
     if (opts.guidance && diagnosis && frame.baseline && frame.expected && !success) {
@@ -91,10 +116,33 @@ export class CameraOverlayRenderer {
 
     drawSkeleton(ctx, pose, this.projector, {
       tone: !frame.trackable ? 'dim' : success ? 'success' : 'tracking',
-      highlight: joints(highlight),
-      errorJoints: errorMode && diagnosis ? joints(diagnosis.focus) : [],
-      pulse,
+      highlight: this.highlight,
+      errorJoints: errorMode ? this.errorJoints : undefined,
+      pulse: (now % 900) / 900,
+      glow: frame.render.glow,
     });
+  }
+
+  /** Rebuild highlight / error joint sets only when the gesture or diagnosis changes. */
+  private updateJointSets(frame: Readonly<MotionFrame>, guidance: boolean): void {
+    const lateral = frame.lateral.phase === 'CONFIRMED' ? frame.lateral.gesture : null;
+    const vertical = frame.vertical.phase === 'CONFIRMED' ? frame.vertical.gesture : null;
+    const diagnosis = frame.diagnosis;
+    const idleFocus = guidance && diagnosis?.verdict === 'idle' ? diagnosis.focus : null;
+    const hKey = `${lateral}|${vertical}|${idleFocus?.join(',') ?? ''}`;
+    if (hKey !== this.highlightKey) {
+      this.highlightKey = hKey;
+      const parts: BodyPart[] = [];
+      if (lateral) parts.push(...GESTURE_PARTS[lateral]);
+      if (vertical) parts.push(...GESTURE_PARTS[vertical]);
+      if (idleFocus) parts.push(...idleFocus);
+      this.highlight = jointSet(parts);
+    }
+    const eKey = diagnosis ? diagnosis.focus.join(',') : '';
+    if (eKey !== this.errorKey) {
+      this.errorKey = eKey;
+      this.errorJoints = jointSet(diagnosis?.focus ?? []);
+    }
   }
 
   private drawGuides(ctx: CanvasRenderingContext2D, frame: Readonly<MotionFrame>, pose: Pose, width: number, height: number): void {
@@ -105,11 +153,11 @@ export class CameraOverlayRenderer {
     ctx.save();
     ctx.font = '600 11px "JetBrains Mono", ui-monospace, monospace';
     ctx.textBaseline = 'bottom';
+    ctx.strokeStyle = rgba(PALETTE.cyan, 0.75);
+    ctx.fillStyle = rgba(PALETTE.cyan, 0.95);
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 8]);
     for (const guide of targetGuides(expected, baseline, shoulderY)) {
-      ctx.strokeStyle = rgba(PALETTE.cyan, 0.75);
-      ctx.fillStyle = rgba(PALETTE.cyan, 0.95);
-      ctx.lineWidth = 2;
-      ctx.setLineDash([10, 8]);
       ctx.beginPath();
       if (guide.orientation === 'horizontal') {
         const y = this.projector.y(guide.value);

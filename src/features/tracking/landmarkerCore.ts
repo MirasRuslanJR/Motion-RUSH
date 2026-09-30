@@ -35,6 +35,26 @@ export function installMediapipeLogFilter(): void {
   }
 }
 
+/**
+ * True when WebGL is rendered in software (GPU blocklisted, VMs, remote desktop):
+ * the MediaPipe GPU delegate then needs ~10 s to warm up and runs slower than
+ * the CPU delegate, so we start on CPU directly. Works in workers and on the main thread.
+ */
+export function isSoftwareWebGL(): boolean {
+  try {
+    const canvas: OffscreenCanvas | HTMLCanvasElement =
+      typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
+    const gl = canvas.getContext('webgl2') as WebGL2RenderingContext | null;
+    if (!gl) return true;
+    const info = gl.getExtension('WEBGL_debug_renderer_info');
+    const renderer = String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    return /swiftshader|llvmpipe|softpipe|software|basic render/i.test(renderer);
+  } catch {
+    return false;
+  }
+}
+
 let moduleLoads = 0;
 
 async function createLandmarker(source: AssetSource, delegate: Delegate, useModule: boolean): Promise<PoseLandmarker> {
@@ -71,12 +91,16 @@ export class LandmarkerCore {
   private switching = false;
   private readonly gpuTimings: number[] = [];
   private gpuVerified = false;
+  private readonly pinned: boolean;
 
-  private constructor(landmarker: PoseLandmarker, source: AssetSource, delegate: Delegate, useModule: boolean) {
+  private constructor(landmarker: PoseLandmarker, source: AssetSource, delegate: Delegate, useModule: boolean, pinned: boolean) {
     this.landmarker = landmarker;
     this.source = source;
     this.currentDelegate = delegate;
     this.useModule = useModule;
+    // A pinned delegate (explicitly requested) is never switched automatically.
+    this.pinned = pinned;
+    this.gpuVerified = pinned;
   }
 
   get delegate(): Delegate {
@@ -88,13 +112,15 @@ export class LandmarkerCore {
     return this.errors;
   }
 
-  static async create(sources: readonly AssetSource[], useModule: boolean): Promise<LandmarkerCore> {
+  /** `forced` pins the delegate (debug: ?delegate=cpu|gpu). */
+  static async create(sources: readonly AssetSource[], useModule: boolean, forced: Delegate | null = null): Promise<LandmarkerCore> {
+    const delegates: readonly Delegate[] = forced ? [forced] : isSoftwareWebGL() ? ['CPU'] : ['GPU', 'CPU'];
     let lastError: unknown = null;
     for (const source of sources) {
-      for (const delegate of ['GPU', 'CPU'] as const) {
+      for (const delegate of delegates) {
         try {
           const landmarker = await createLandmarker(source, delegate, useModule);
-          return new LandmarkerCore(landmarker, source, delegate, useModule);
+          return new LandmarkerCore(landmarker, source, delegate, useModule, forced !== null);
         } catch (error) {
           lastError = error;
         }
@@ -104,12 +130,13 @@ export class LandmarkerCore {
   }
 
   /**
-   * Returns raw landmarks for every detected person (may be empty).
-   * Transient failures return [] (and bump `consecutiveErrors`); a persistent
-   * failure throws so the caller can surface a real error.
+   * Returns raw landmarks for every detected person ([] = nobody in frame),
+   * or null when there is no answer for this frame (delegate switch in progress,
+   * transient failure) — callers must not treat that as "nobody there".
+   * A persistent failure throws so the caller can surface a real error.
    */
-  detect(image: TexImageSource, now: number): NormalizedLandmark[][] {
-    if (this.switching) return [];
+  detect(image: TexImageSource, now: number): NormalizedLandmark[][] | null {
+    if (this.switching) return null;
     // VIDEO mode requires strictly increasing timestamps.
     const timestamp = Math.max(now, this.lastTimestamp + 1);
     this.lastTimestamp = timestamp;
@@ -122,9 +149,9 @@ export class LandmarkerCore {
       return result.landmarks;
     } catch (error) {
       this.errors++;
-      if (this.errors >= maxConsecutiveErrors && this.currentDelegate === 'GPU') void this.switchToCpu();
+      if (this.errors >= maxConsecutiveErrors && this.currentDelegate === 'GPU' && !this.pinned) void this.switchToCpu();
       if (this.errors > maxConsecutiveErrors * 4) throw error;
-      return [];
+      return null;
     }
   }
 

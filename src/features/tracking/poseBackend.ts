@@ -59,18 +59,38 @@ class MainThreadBackend implements PoseBackend {
       callbacks.onError(error);
       return;
     }
-    callbacks.onResult({ poses, capturedAt, inferenceMs: performance.now() - started });
+    // null = no answer for this frame (delegate switch) — keep the previous state.
+    if (poses) callbacks.onResult({ poses, capturedAt, inferenceMs: performance.now() - started });
+  }
+}
+
+function param(name: string): string | null {
+  try {
+    return new URLSearchParams(window.location.search).get(name);
+  } catch {
+    return null;
   }
 }
 
 function workerAllowed(): boolean {
   if (!TRACKING_CONFIG.worker.enabled) return false;
   if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return false;
-  try {
-    return new URLSearchParams(window.location.search).get('worker') !== '0';
-  } catch {
-    return true;
-  }
+  return param('worker') !== '0';
+}
+
+/** Debug knobs for diagnosing a specific machine: ?delegate=cpu|gpu, ?frame=bitmap|videoframe. */
+export interface BackendOverrides {
+  delegate: Delegate | null;
+  frame: 'bitmap' | 'videoframe' | null;
+}
+
+function overrides(): BackendOverrides {
+  const d = param('delegate')?.toUpperCase();
+  const f = param('frame');
+  return {
+    delegate: d === 'CPU' || d === 'GPU' ? d : null,
+    frame: f === 'bitmap' || f === 'videoframe' ? f : null,
+  };
 }
 
 let shared: Promise<PoseBackend> | null = null;
@@ -84,9 +104,10 @@ export function loadPoseBackend(): Promise<PoseBackend> {
   if (!shared) {
     shared = (async (): Promise<PoseBackend> => {
       const sources = assetSources();
+      const knobs = overrides();
       if (workerAllowed()) {
         try {
-          const backend = await WorkerPoseBackend.create(sources, !DEBUG);
+          const backend = await WorkerPoseBackend.create(sources, !DEBUG, knobs);
           backend.onDead = () => {
             shared = null;
           };
@@ -96,7 +117,7 @@ export function loadPoseBackend(): Promise<PoseBackend> {
         }
       }
       if (!DEBUG) installMediapipeLogFilter();
-      return new MainThreadBackend(await LandmarkerCore.create(sources, false));
+      return new MainThreadBackend(await LandmarkerCore.create(sources, false, knobs.delegate));
     })().catch((error: unknown) => {
       shared = null;
       throw error;
