@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { CameraViewport } from '../components/CameraViewport';
 import { HoldGesture } from '../components/HoldGesture';
 import { Icon } from '../components/Icon';
 import { NicknameField } from '../components/NicknameField';
+import { GESTURE_CONFIG } from '../config/gesture.config';
 import type { MotionEngine } from '../features/engine/MotionEngine';
+import { lateralOffset } from '../features/gestures/thresholds';
 import { GAME_MODES, type GameModeDef, type GameModeId } from '../features/modes/modes';
-import { useGestureEvents, useMotionUi } from '../hooks/useEngine';
+import { useEngineFrame, useGestureEvents, useMotionUi } from '../hooks/useEngine';
 import { sfx } from '../lib/audio/sfx';
+import { loopOffset, mod, releaseVelocity, swipeSteps } from '../lib/carousel';
+import { clamp } from '../lib/math/geometry';
 import { bestFor, type Profile } from '../lib/storage';
 import { ONLINE_ENABLED } from '../lib/supabase';
 import './ModeSelectScreen.css';
@@ -43,42 +47,102 @@ function metaOf(mode: GameModeDef): string {
   return parts.join(' · ');
 }
 
-/** Swipe distance (px) that flips to the next card. */
-const SWIPE_PX = 50;
+const N = GAME_MODES.length;
+const GAP = 18;
+/** Cards further than this from the centre are hidden (they may jump around the loop). */
+const VISIBLE_RANGE = 2.6;
+/** Standing in a side zone keeps browsing: first repeat after this long… */
+const REPEAT_DELAY_MS = 900;
+/** …then one card per interval. */
+const REPEAT_EVERY_MS = 650;
+/** Trackpad / wheel: accumulated px per card, and the pause that ends one gesture. */
+const WHEEL_STEP_PX = 90;
+const WHEEL_IDLE_MS = 180;
+
+interface Drag {
+  id: number;
+  x0: number;
+  y0: number;
+  card: number | null;
+  moved: boolean;
+  samples: { x: number; t: number }[];
+}
+
+function vibrate(): void {
+  try {
+    navigator.vibrate?.(8);
+  } catch {
+    // Not supported — fine.
+  }
+}
 
 /**
- * Mode carousel. Browse by stepping left/right in front of the camera,
- * swiping (touch / mouse drag / trackpad) or the arrow keys; start with a jump.
+ * Mode carousel — an endless loop of cards.
+ *   touch / mouse: drag follows the finger, a flick carries momentum, a long fling skips cards
+ *   trackpad / wheel: horizontal swipe, one card per ~90 px
+ *   keyboard: ← → Home End Enter
+ *   camera: step (or lean) to a side to browse, stay there to keep scrolling, jump to start
  */
 export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLeaderboard, onProfile }: ModeSelectScreenProps) {
   const scheme = useMotionUi(engine, (s) => s.scheme);
   const [index, setIndex] = useState(() => Math.max(0, GAME_MODES.findIndex((m) => m.id === initialMode)));
   const [dragX, setDragX] = useState(0);
-  const drag = useRef<{ x: number; card: number | null; moved: boolean } | null>(null);
-  const wheelAt = useRef(0);
-  const mode = GAME_MODES[index] ?? (GAME_MODES[0] as GameModeDef);
-  const blocked = unavailable(mode, profile);
+  const [dragging, setDragging] = useState(false);
+  const [stepPx, setStepPx] = useState(340 + GAP);
+  const drag = useRef<Drag | null>(null);
+  const wheel = useRef({ acc: 0, last: 0 });
+  const cardRef = useRef<HTMLElement | null>(null);
+  const markerRef = useRef<HTMLSpanElement>(null);
+  const hold = useRef<{ since: number | null; last: number }>({ since: null, last: 0 });
   const armedAt = useRef(Number.POSITIVE_INFINITY);
+  const selected = mod(index, N);
+  const mode = GAME_MODES[selected] ?? (GAME_MODES[0] as GameModeDef);
+  const blocked = unavailable(mode, profile);
 
   const go = useCallback((step: number) => {
-    setIndex((i) => (i + step + GAME_MODES.length) % GAME_MODES.length);
+    if (step === 0) return;
+    setIndex((i) => i + step);
     sfx.play('step');
+    vibrate();
   }, []);
+
+  const start = useCallback(
+    (target: GameModeDef) => {
+      if (unavailable(target, profile)) return;
+      sfx.play('confirm');
+      onSelect(target.id);
+    },
+    [onSelect, profile],
+  );
 
   useEffect(() => {
     armedAt.current = performance.now() + 900;
     engine.setExpected(null);
   }, [engine]);
 
+  // Card width follows the viewport (CSS clamps it); measure it for the swipe maths.
+  useLayoutEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    const measure = () => setStepPx(el.offsetWidth + GAP);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
       if (e.key === 'ArrowLeft') go(-1);
       else if (e.key === 'ArrowRight') go(1);
+      else if (e.key === 'Home') setIndex((i) => i - mod(i, N));
+      else if (e.key === 'End') setIndex((i) => i - mod(i, N) + N - 1);
+      else if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) start(mode);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [go]);
+  }, [go, start, mode]);
 
   useGestureEvents(engine, (event) => {
     if (event.phase !== 'start' || event.timestamp < armedAt.current) return;
@@ -86,37 +150,76 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
     else if (event.type === 'LEAN_RIGHT') go(1);
   });
 
-  const start = (target: GameModeDef) => {
-    if (unavailable(target, profile)) return;
-    sfx.play('confirm');
-    onSelect(target.id);
+  // Camera: keep scrolling while the player stays in a side zone; show where they stand.
+  useEngineFrame(engine, (frame) => {
+    const lat = frame.lateral;
+    const side = lat.phase === 'CONFIRMED' ? (lat.gesture === 'LEAN_LEFT' ? -1 : lat.gesture === 'LEAN_RIGHT' ? 1 : 0) : 0;
+    const h = hold.current;
+    if (side !== 0 && frame.time >= armedAt.current) {
+      h.since ??= frame.time;
+      if (frame.time - h.since >= REPEAT_DELAY_MS && frame.time - h.last >= REPEAT_EVERY_MS) {
+        h.last = frame.time;
+        go(side);
+      }
+    } else {
+      h.since = null;
+    }
+    const marker = markerRef.current;
+    if (!marker) return;
+    const f = frame.features;
+    if (!frame.trackable || !f) {
+      marker.style.opacity = '0';
+      return;
+    }
+    // Map the lane metric so the lane borders sit at the painted zone borders (±0.3).
+    const body = scheme === 'body';
+    const activation = body ? GESTURE_CONFIG.body.step.activation : GESTURE_CONFIG.lean.activation;
+    const raw = lateralOffset(f, scheme);
+    const pos = clamp(body ? raw : (raw / activation) * 0.3, -1, 1);
+    marker.style.opacity = '1';
+    marker.style.left = `${50 + pos * 50}%`;
+    marker.dataset.side = side < 0 ? 'left' : side > 0 ? 'right' : 'center';
+  });
+
+  const endDrag = (commit: boolean, x: number) => {
+    const d = drag.current;
+    drag.current = null;
+    setDragging(false);
+    setDragX(0);
+    if (!d || !commit) return;
+    const dx = x - d.x0;
+    if (d.moved) {
+      go(swipeSteps(dx, releaseVelocity(d.samples), stepPx));
+    } else if (d.card !== null) {
+      // A tap: the centred card starts the mode, a side card scrolls to it.
+      const offset = loopOffset(d.card, selected, N);
+      if (offset === 0) start(mode);
+      else go(offset);
+    }
   };
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || drag.current) return;
     const card = (e.target as HTMLElement).closest<HTMLElement>('[data-index]');
-    drag.current = { x: e.clientX, card: card ? Number(card.dataset.index) : null, moved: false };
-    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { id: e.pointerId, x0: e.clientX, y0: e.clientY, card: card ? Number(card.dataset.index) : null, moved: false, samples: [{ x: e.clientX, t: e.timeStamp }] };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Pointer already gone (or synthetic) — the drag still works without capture.
+    }
   };
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     const d = drag.current;
-    if (!d) return;
-    const dx = e.clientX - d.x;
-    if (Math.abs(dx) > 6) d.moved = true;
-    setDragX(dx);
-  };
-  const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const d = drag.current;
-    drag.current = null;
-    setDragX(0);
-    if (!d) return;
-    const dx = e.clientX - d.x;
-    if (dx <= -SWIPE_PX) go(1);
-    else if (dx >= SWIPE_PX) go(-1);
-    else if (!d.moved && d.card !== null) {
-      // A tap: on the centred card it starts the mode, on a side card it scrolls to it.
-      if (d.card === index) start(mode);
-      else setIndex(d.card);
+    if (!d || d.id !== e.pointerId) return;
+    const dx = e.clientX - d.x0;
+    if (!d.moved && Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(e.clientY - d.y0)) {
+      d.moved = true;
+      setDragging(true);
     }
+    d.samples.push({ x: e.clientX, t: e.timeStamp });
+    if (d.samples.length > 8) d.samples.shift();
+    // Past the neighbours the drag resists (rubber band), so a fling never loses the cards.
+    if (d.moved) setDragX(Math.abs(dx) > stepPx * 2.5 ? Math.sign(dx) * (stepPx * 2.5 + (Math.abs(dx) - stepPx * 2.5) * 0.3) : dx);
   };
 
   return (
@@ -128,7 +231,7 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
           <li>
             <Icon name="left" size={16} />
             <Icon name="right" size={16} />
-            {scheme === 'body' ? 'Перейди влево / вправо — листать' : 'Наклон влево / вправо — листать'}
+            {scheme === 'body' ? 'Перейди влево / вправо — листать, постой там — листает дальше' : 'Наклон влево / вправо — листать'}
           </li>
           <li>
             <Icon name="up" size={16} />
@@ -136,7 +239,7 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
           </li>
           <li>
             <Icon name="users" size={16} />
-            Или свайпай карточки
+            Свайп, колесо, стрелки ← → и Enter
           </li>
         </ul>
         <NicknameField value={profile.nickname} onSaved={(nickname) => onProfile({ ...profile, nickname })} compact />
@@ -147,7 +250,10 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
 
       <section className="modes__main">
         <p className="t-label">
-          Выбери режим · {index + 1} / {GAME_MODES.length} · {scheme === 'body' ? 'всё тело' : 'сидя'}
+          Выбери режим · {selected + 1} / {N} · {scheme === 'body' ? 'всё тело' : 'сидя'}
+        </p>
+        <p className="sr-only" aria-live="polite">
+          {mode.title}. {mode.tagline}
         </p>
 
         <div className="carousel" aria-roledescription="carousel" aria-label="Режимы игры">
@@ -155,58 +261,86 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
             <Icon name="left" size={22} />
           </button>
           <div
-            className={`carousel__viewport ${dragX !== 0 ? 'is-dragging' : ''}`}
+            className={`carousel__viewport ${dragging ? 'is-dragging' : ''}`}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={() => {
-              drag.current = null;
-              setDragX(0);
-            }}
+            onPointerUp={(e) => endDrag(true, e.clientX)}
+            onPointerCancel={(e) => endDrag(false, e.clientX)}
+            onLostPointerCapture={(e) => drag.current && endDrag(true, e.clientX)}
             onWheel={(e) => {
-              const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : 0;
-              const now = performance.now();
-              if (Math.abs(delta) < 20 || now - wheelAt.current < 350) return;
-              wheelAt.current = now;
-              go(delta > 0 ? 1 : -1);
+              const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.shiftKey ? e.deltaY : 0;
+              if (delta === 0) return;
+              const w = wheel.current;
+              if (e.timeStamp - w.last > WHEEL_IDLE_MS) w.acc = 0;
+              w.last = e.timeStamp;
+              w.acc += delta;
+              if (Math.abs(w.acc) >= WHEEL_STEP_PX) {
+                go(Math.sign(w.acc));
+                w.acc = 0;
+              }
             }}
           >
-            <div className="carousel__track" style={{ '--i': index, '--drag': `${dragX}px` } as CSSProperties}>
-              {GAME_MODES.map((m, i) => {
-                const why = unavailable(m, profile);
-                const best = bestFor(profile, m.id);
-                const offset = i - index;
-                return (
-                  <article
-                    key={m.id}
-                    data-index={i}
-                    className={`mode-card ${i === index ? 'is-selected' : ''} ${why ? 'is-locked' : ''} ${Math.abs(offset) > 2 ? 'is-far' : ''}`}
-                    style={{ '--accent': m.accent } as CSSProperties}
-                    aria-current={i === index}
-                    aria-label={m.title}
-                  >
-                    <span className="mode-card__badge">{m.badge}</span>
-                    <span className="mode-card__title">{m.title}</span>
-                    <span className="mode-card__tagline">{m.tagline}</span>
-                    <span className="mode-card__goal">{m.goal}</span>
-                    <span className="mode-card__meta">
-                      {why ?? metaOf(m)}
-                      {best > 0 && !why && <strong> · рекорд {best.toLocaleString('ru-RU')}</strong>}
-                    </span>
-                  </article>
-                );
-              })}
-            </div>
+            {GAME_MODES.map((m, i) => {
+              const why = unavailable(m, profile);
+              const best = bestFor(profile, m.id);
+              const pos = loopOffset(i, selected, N) + dragX / stepPx;
+              const dist = Math.abs(pos);
+              const hidden = dist > VISIBLE_RANGE;
+              const style = {
+                '--accent': m.accent,
+                transform: `translateX(calc(-50% + ${pos * stepPx}px)) scale(${1 - Math.min(dist, 1.5) * 0.09})`,
+                opacity: hidden ? 0 : Math.max(0.08, 1 - dist * 0.42),
+                zIndex: 10 - Math.round(dist),
+                visibility: hidden ? 'hidden' : 'visible',
+              } as CSSProperties;
+              return (
+                <article
+                  key={m.id}
+                  ref={i === 0 ? (el) => void (cardRef.current = el) : undefined}
+                  data-index={i}
+                  className={`mode-card ${i === selected ? 'is-selected' : ''} ${why ? 'is-locked' : ''}`}
+                  style={style}
+                  aria-current={i === selected}
+                  aria-hidden={hidden}
+                  aria-label={m.title}
+                >
+                  <span className="mode-card__badge">{m.badge}</span>
+                  <span className="mode-card__title">{m.title}</span>
+                  <span className="mode-card__tagline">{m.tagline}</span>
+                  <span className="mode-card__goal">{m.goal}</span>
+                  <span className="mode-card__meta">
+                    {why ?? metaOf(m)}
+                    {best > 0 && !why && <strong> · рекорд {best.toLocaleString('ru-RU')}</strong>}
+                  </span>
+                </article>
+              );
+            })}
           </div>
           <button type="button" className="carousel__arrow carousel__arrow--next" onClick={() => go(1)} aria-label="Следующий режим">
             <Icon name="right" size={22} />
           </button>
         </div>
 
-        <div className="carousel__dots" aria-hidden="true">
+        <div className="carousel__dots" role="tablist" aria-label="Все режимы">
           {GAME_MODES.map((m, i) => (
-            <span key={m.id} className={i === index ? 'is-active' : ''} style={{ '--accent': m.accent } as CSSProperties} />
+            <button
+              key={m.id}
+              type="button"
+              role="tab"
+              aria-selected={i === selected}
+              aria-label={m.title}
+              className={i === selected ? 'is-active' : ''}
+              style={{ '--accent': m.accent } as CSSProperties}
+              onClick={() => go(loopOffset(i, selected, N))}
+            />
           ))}
+        </div>
+
+        <div className="carousel__body" aria-hidden="true" title="Где ты стоишь в кадре">
+          <span className="carousel__zone">◀ листать</span>
+          <span className="carousel__zone carousel__zone--center">центр</span>
+          <span className="carousel__zone">листать ▶</span>
+          <span ref={markerRef} className="carousel__marker" />
         </div>
 
         <div className="modes__start">

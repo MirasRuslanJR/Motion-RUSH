@@ -41,10 +41,9 @@
   min-width: 0;
 }
 
-/* ── Carousel ── */
+/* ── Carousel: an endless loop, every card positioned from its distance to the centre ── */
 .carousel {
   --card-w: min(340px, 74vw);
-  --gap: 18px;
   position: relative;
   display: flex;
   align-items: center;
@@ -54,32 +53,17 @@
   position: relative;
   flex: 1;
   min-width: 0;
+  height: 300px;
   overflow: hidden;
-  padding: 18px 0 22px;
   touch-action: pan-y;
   cursor: grab;
   user-select: none;
-  mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
+  -webkit-user-select: none;
+  mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%);
 }
 
 .carousel__viewport.is-dragging {
   cursor: grabbing;
-}
-
-.carousel__track {
-  display: flex;
-  gap: var(--gap);
-  width: max-content;
-  transform: translateX(calc(50cqw - var(--card-w) / 2 - var(--i) * (var(--card-w) + var(--gap)) + var(--drag)));
-  transition: transform 0.45s cubic-bezier(0.2, 0.9, 0.25, 1.05);
-}
-
-.carousel__viewport {
-  container-type: inline-size;
-}
-
-.is-dragging .carousel__track {
-  transition: none;
 }
 
 .carousel__arrow {
@@ -93,7 +77,7 @@
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
-  z-index: 1;
+  z-index: 20;
 }
 
 .carousel__arrow:hover {
@@ -102,11 +86,25 @@
 
 .carousel__dots {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
 }
 
-.carousel__dots span {
+.carousel__dots button {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: width 0.3s;
+}
+
+.carousel__dots button::after {
+  content: '';
   width: 7px;
   height: 7px;
   border-radius: 999px;
@@ -116,19 +114,75 @@
     background 0.3s;
 }
 
-.carousel__dots span.is-active {
-  width: 22px;
+.carousel__dots button.is-active {
+  width: 30px;
+}
+
+.carousel__dots button.is-active::after {
+  width: 24px;
   background: var(--accent);
+}
+
+/* Where the player stands (camera browsing): the side zones scroll the carousel. */
+.carousel__body {
+  position: relative;
+  display: grid;
+  grid-template-columns: 35% 30% 35%;
+  width: min(420px, 100%);
+  margin: 2px auto 0;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.carousel__zone {
+  padding: 5px 0;
+  text-align: center;
+}
+
+.carousel__zone--center {
+  border-left: 1px dashed var(--line-strong);
+  border-right: 1px dashed var(--line-strong);
+}
+
+.carousel__marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  translate: -50% -50%;
+  background: var(--cyan);
+  box-shadow: 0 0 12px var(--cyan);
+  opacity: 0;
+  transition:
+    left 0.12s linear,
+    background 0.2s,
+    opacity 0.2s;
+}
+
+.carousel__marker[data-side='left'],
+.carousel__marker[data-side='right'] {
+  background: #ff5ad1;
+  box-shadow: 0 0 14px #ff5ad1;
 }
 
 .mode-card {
   --accent: var(--cyan);
-  position: relative;
+  position: absolute;
+  top: 22px;
+  left: 50%;
   display: grid;
   align-content: start;
   gap: 10px;
   width: var(--card-w);
-  min-height: 250px;
+  height: 250px;
   padding: 24px 22px 20px;
   border-radius: var(--radius-l);
   border: 1px solid var(--line);
@@ -137,8 +191,7 @@
     var(--surface);
   text-align: left;
   overflow: hidden;
-  opacity: 0.45;
-  transform: scale(0.88);
+  will-change: transform;
   transition:
     transform 0.45s cubic-bezier(0.2, 0.9, 0.25, 1.05),
     opacity 0.3s,
@@ -146,13 +199,13 @@
     box-shadow 0.3s;
 }
 
-.mode-card.is-far {
-  opacity: 0.15;
+.is-dragging .mode-card {
+  transition:
+    border-color 0.3s,
+    box-shadow 0.3s;
 }
 
 .mode-card.is-selected {
-  opacity: 1;
-  transform: scale(1);
   border-color: var(--accent);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent),
@@ -164,6 +217,11 @@
   box-shadow: none;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .mode-card {
+    transition: opacity 0.2s;
+  }
+}
 .mode-card__badge {
   justify-self: start;
   padding: 3px 9px;
@@ -227,8 +285,11 @@
   .carousel__arrow {
     display: none;
   }
+  .carousel__viewport {
+    height: 262px;
+  }
   .mode-card {
-    min-height: 210px;
+    height: 226px;
     padding: 20px 18px 16px;
   }
   .modes__start {
