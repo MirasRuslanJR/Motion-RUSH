@@ -54,35 +54,35 @@ export function schemeOf(mode: 'full' | 'upper' | null | undefined): ControlSche
 
 export const BODY_MOTION_META: Record<ExpectedMotion, MotionMeta> = {
   LEAN_LEFT: {
-    title: 'Step left',
+    title: 'Шаг влево',
     cue: 'Перейди влево — в левую часть кадра',
     action: 'Левая полоса',
     arrow: 'left',
     focus: ['hips', 'legs'],
   },
   LEAN_RIGHT: {
-    title: 'Step right',
+    title: 'Шаг вправо',
     cue: 'Перейди вправо — в правую часть кадра',
     action: 'Правая полоса',
     arrow: 'right',
     focus: ['hips', 'legs'],
   },
   JUMP: {
-    title: 'Jump',
+    title: 'Прыжок',
     cue: 'Подпрыгни — оторвись от пола',
     action: 'Прыжок через барьер',
     arrow: 'up',
     focus: ['hips', 'legs'],
   },
   CROUCH: {
-    title: 'Squat',
+    title: 'Присед',
     cue: 'Присядь — опусти таз',
     action: 'Пригнуться под лучом',
     arrow: 'down',
     focus: ['hips', 'legs'],
   },
   CENTER: {
-    title: 'Center',
+    title: 'Центр',
     cue: 'Вернись в центр',
     action: 'Центральная полоса',
     arrow: null,
@@ -98,35 +98,35 @@ export function motionMeta(motion: ExpectedMotion, scheme: ControlScheme): Motio
 /** Seated scheme texts. */
 export const MOTION_META: Record<ExpectedMotion, MotionMeta> = {
   LEAN_LEFT: {
-    title: 'Lean left',
+    title: 'Наклон влево',
     cue: 'Наклони корпус влево',
     action: 'Левая полоса',
     arrow: 'left',
     focus: ['shoulders', 'torso'],
   },
   LEAN_RIGHT: {
-    title: 'Lean right',
+    title: 'Наклон вправо',
     cue: 'Наклони корпус вправо',
     action: 'Правая полоса',
     arrow: 'right',
     focus: ['shoulders', 'torso'],
   },
   JUMP: {
-    title: 'Arms up',
+    title: 'Руки вверх',
     cue: 'Подними обе руки над головой',
     action: 'Прыжок через барьер',
     arrow: 'up',
     focus: ['leftArm', 'rightArm'],
   },
   CROUCH: {
-    title: 'Crouch',
+    title: 'Пригнись',
     cue: 'Присядь — опусти плечи вниз',
     action: 'Пригнуться под лучом',
     arrow: 'down',
     focus: ['hips', 'torso'],
   },
   CENTER: {
-    title: 'Center',
+    title: 'Центр',
     cue: 'Встань ровно по центру',
     action: 'Центральная полоса',
     arrow: null,

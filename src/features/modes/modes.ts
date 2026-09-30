@@ -53,7 +53,7 @@ const ALL_MODES: readonly GameModeDef[] = [
     ...RUNNER,
     id: 'classic',
     title: 'Classic Run',
-    badge: 'ОСНОВНОЙ',
+    badge: 'НАЧНИ ОТСЮДА',
     tagline: '70 секунд, 4 фазы скорости, каждый раз новая трасса',
     accent: '#2ee6ff',
     course: 'standard',

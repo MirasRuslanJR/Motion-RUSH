@@ -30,8 +30,13 @@
 
 .modes__howto li {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
+}
+
+.modes__howto li svg {
+  flex: none;
+  margin-top: 3px;
 }
 
 .modes__main {
@@ -133,7 +138,7 @@
   border-radius: 999px;
   border: 1px solid var(--line);
   overflow: hidden;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -226,7 +231,7 @@
   justify-self: start;
   padding: 3px 9px;
   border-radius: 999px;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;

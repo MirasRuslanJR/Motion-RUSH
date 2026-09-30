@@ -154,7 +154,7 @@ export class GameRenderer {
         if (perfect) this.particles.burst(chest.x, chest.y, PALETTE.white, 14, g.laneW * 3);
         this.floaters.push({
           text: `+${event.points}`,
-          sub: perfect ? 'PERFECT' : 'GOOD',
+          sub: perfect ? 'ИДЕАЛЬНО' : 'ХОРОШО',
           x: chest.x,
           y: chest.y - g.laneW * 0.9,
           born: now,
@@ -167,7 +167,7 @@ export class GameRenderer {
         this.missFlashUntil = now + 380;
         if (!this.reducedMotion) this.shakeUntil = now + 280;
         this.particles.burst(chest.x, chest.y, PALETTE.error, 20, g.laneW * 2, Math.PI * 1.2);
-        this.floaters.push({ text: 'MISS', sub: '', x: chest.x, y: chest.y - g.laneW * 0.9, born: now, color: PALETTE.error });
+        this.floaters.push({ text: 'МИМО', sub: '', x: chest.x, y: chest.y - g.laneW * 0.9, born: now, color: PALETTE.error });
         break;
       case 'orb': {
         this.itemFx.set(event.item.id, { status: 'clear', at: now });

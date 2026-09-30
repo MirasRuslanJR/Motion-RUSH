@@ -152,7 +152,7 @@
 
 .checklist__detail {
   font-size: 13px;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
 }
 
 .checklist__state {
@@ -161,7 +161,7 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   color: var(--text-3);
 }
 

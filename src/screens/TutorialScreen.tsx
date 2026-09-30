@@ -80,7 +80,7 @@ export function TutorialScreen({ engine, onDone }: TutorialScreenProps) {
       </div>
 
       <aside className="setup__panel tutorial__panel">
-        <p className="t-label">Шаг 3 · обучение · {step + 1} из {STEPS.length}</p>
+        <p className="t-label">Шаг 3 из 4 · обучение · движение {step + 1} из {STEPS.length}</p>
         <ol className="tutorial__steps" aria-label="Движения">
           {STEPS.map((g, i) => {
             const m = motionMeta(g, scheme);

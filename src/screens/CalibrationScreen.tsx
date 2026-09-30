@@ -63,7 +63,7 @@ export function CalibrationScreen({ engine, onDone }: CalibrationScreenProps) {
       </CameraViewport>
 
       <aside className="setup__panel">
-        <p className="t-label">Шаг 2 · калибровка</p>
+        <p className="t-label">Шаг 2 из 4 · калибровка</p>
         <h1 className="t-headline setup__title">Стой ровно</h1>
         <p className="setup__instruction">Руки вдоль тела, смотри в камеру. Мы запомним твою нейтральную позу — все жесты считаются от неё.</p>
 

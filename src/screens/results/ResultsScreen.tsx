@@ -157,7 +157,7 @@ export function ResultsScreen({ engine, result, mode, recorded, profile, duel, o
     { label: 'Лучшее комбо', value: String(result.bestCombo) },
     { label: 'Жестов распознано', value: String(result.gesturesDetected) },
     { label: 'Время сессии', value: seconds(result.durationMs) },
-    { label: 'Perfect', value: `${stats.perfect} из ${stats.total}` },
+    { label: 'Идеально вовремя', value: `${stats.perfect} из ${stats.total}` },
     {
       label: 'Запас до препятствия',
       value: stats.avgLeadMs === null ? '—' : `${(stats.avgLeadMs / 1000).toFixed(1)} с`,
@@ -165,7 +165,16 @@ export function ResultsScreen({ engine, result, mode, recorded, profile, duel, o
     { label: 'Бонусы собраны', value: `${result.orbsCollected} из ${result.orbsTotal}` },
   ];
 
-  const headline = result.outcome === 'complete' ? 'Motion complete' : mode.energy === 1 ? 'Game over' : 'Out of energy';
+  const headline = result.outcome === 'complete' ? 'трасса пройдена' : mode.energy === 1 ? 'игра окончена' : 'энергия закончилась';
+  // A human sentence first — numbers come after.
+  const verdict =
+    accuracy >= 90
+      ? 'Великолепно! Тело слушается тебя идеально.'
+      : accuracy >= 70
+        ? 'Хороший забег! Ещё чуть-чуть — и будет идеально.'
+        : accuracy >= 40
+          ? 'Неплохо для начала. Ниже — что получилось и что подтянуть.'
+          : 'Разогрелись! Посмотри подсказки ниже и попробуй ещё раз.';
 
   return (
     <main className="screen results">
@@ -187,6 +196,7 @@ export function ResultsScreen({ engine, result, mode, recorded, profile, duel, o
             {recorded?.isNewBest && <span className="badge badge--success">Новый рекорд</span>}
             {recorded?.rank && !recorded.isNewBest && <span className="badge">#{recorded.rank} в твоей таблице</span>}
           </p>
+          <p className="results__verdict">{verdict}</p>
           {duel && <DuelVerdict room={duel} score={result.score} />}
         </div>
         <div className="results__actions">
@@ -210,7 +220,7 @@ export function ResultsScreen({ engine, result, mode, recorded, profile, duel, o
 
       <section className="results__grid">
         <div className="tile tile--hero">
-          <span className="t-label">Motion accuracy</span>
+          <span className="t-label">Точность движений</span>
           <span className="tile__hero-value">{accuracy}%</span>
           <span className="tile__sub">
             {stats.cleared} из {stats.total} препятствий пройдено правильным движением
@@ -230,8 +240,9 @@ export function ResultsScreen({ engine, result, mode, recorded, profile, duel, o
       <section className="results__row">
         <div className="panel">
           <div className="move-cards">
-            <MoveCard title="Your strongest move" move={stats.strongest} tone="good" scheme={result.scheme} />
-            <MoveCard title="Needs work" move={stats.needsWork} tone="work" scheme={result.scheme} />
+            {/* A "best move" at 0% would be a false compliment. */}
+            <MoveCard title="Лучше всего получается" move={stats.strongest && stats.strongest.accuracy > 0 ? stats.strongest : null} tone="good" scheme={result.scheme} />
+            <MoveCard title="Стоит потренировать" move={stats.needsWork} tone="work" scheme={result.scheme} />
           </div>
           <MoveBars moves={stats.perMove} scheme={result.scheme} />
         </div>

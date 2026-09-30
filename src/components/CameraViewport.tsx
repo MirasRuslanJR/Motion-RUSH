@@ -88,7 +88,7 @@ export function CameraViewport({
         <>
           <div className="viewport__tag viewport__tag--tl">
             <span className={`live-dot ${tracked ? 'is-on' : ''}`} />
-            {!modelReady ? 'ЗАГРУЗКА МОДЕЛИ' : tracked ? 'TRACKING' : 'ПОИСК ТЕЛА'}
+            {!modelReady ? 'Загружаем модель' : tracked ? 'Вижу тебя' : 'Ищу тебя в кадре'}
           </div>
           <div className="viewport__tag viewport__tag--tr" title="Уверенность трекинга">
             <Icon name="person" size={14} />

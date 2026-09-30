@@ -22,7 +22,7 @@ import { useStore } from '../../lib/store';
 import { RollingNumber } from './RollingNumber';
 import './GameScreen.css';
 
-const PHASE_NAMES = ['Warm-up', 'Flow', 'Rush', 'Challenge', 'Frenzy', 'Overdrive', 'Insane'];
+const PHASE_NAMES = ['Разминка', 'Разгон', 'Скорость', 'Финиш', 'Шквал', 'Овердрайв', 'Безумие'];
 const END_REVEAL_MS = 1600;
 const MISS_TOAST_MS = 2200;
 /** Live state is broadcast to the duel opponent at ~5 Hz. */
@@ -366,7 +366,7 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
                 transition={{ type: 'spring', stiffness: 420, damping: 18 }}
               >
                 <span className="t-hud">{hud.combo}</span>
-                <span className="t-label">combo</span>
+                <span className="t-label">комбо</span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -374,7 +374,7 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
           <div className="hud__bottom">
             {nextMeta && playing && (
               <div className="hud__cue" key={hud.nextId}>
-                <span className="t-label">Next</span>
+                <span className="t-label">Дальше</span>
                 {nextMeta.arrow && <Icon name={nextMeta.arrow} size={18} />}
                 <strong>{nextMeta.title}</strong>
                 <span className="hud__cue-text">{nextMeta.cue}</span>
@@ -401,7 +401,7 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
                     exit={{ scale: 0.6, opacity: 0 }}
                     transition={{ type: 'spring', stiffness: 300, damping: 20 }}
                   >
-                    {hud.countdown === 0 ? 'GO' : hud.countdown}
+                    {hud.countdown === 0 ? 'Старт!' : hud.countdown}
                   </motion.span>
                 )}
               </AnimatePresence>
@@ -416,7 +416,7 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
               exit={{ opacity: 0 }}
               role="alert"
             >
-              <p className="t-label">{hud.phase === 'resuming' ? 'Resuming' : 'Tracking lost'}</p>
+              <p className="t-label">{hud.phase === 'resuming' ? 'Продолжаем' : 'Пауза'}</p>
               <h2 className="t-headline">{hud.phase === 'resuming' ? 'Продолжаем!' : 'Вернись в центр кадра'}</h2>
               <p className="overlay__message">{hud.phase === 'resuming' ? 'Игра продолжится через секунду' : trackingMessage}</p>
               <Ring circleRef={resumeRef} size={72} tone="success">
@@ -438,7 +438,7 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ type: 'spring', stiffness: 200, damping: 16, delay: 0.1 }}
               >
-                {hud.outcome === 'complete' ? 'Motion complete' : mode.energy === 1 ? 'Game over' : 'Out of energy'}
+                {hud.outcome === 'complete' ? 'Трасса пройдена!' : mode.energy === 1 ? 'Игра окончена' : 'Энергия закончилась'}
               </motion.h2>
             </motion.div>
           )}
@@ -449,7 +449,7 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
         <CameraViewport engine={engine} variant="panel" guidance={playing} className="game__camera" />
         {multiple && (
           <div className="game__warning" role="status">
-            <Icon name="users" size={16} /> ONE PLAYER ONLY — оставь в кадре одного человека
+            <Icon name="users" size={16} /> В кадре должен быть один человек
           </div>
         )}
         <MoveLegend engine={engine} next={playing ? nextMotion : null} scheme={scheme} />

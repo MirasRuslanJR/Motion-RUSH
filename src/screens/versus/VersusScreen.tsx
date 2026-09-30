@@ -156,7 +156,7 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
                 {s?.miss && <p className="versus__miss">{s.miss}</p>}
                 {s?.cue && (
                   <div className="versus__cue">
-                    <span className="t-label">Next</span> <strong>{s.cue}</strong>
+                    <span className="t-label">Дальше</span> <strong>{s.cue}</strong>
                   </div>
                 )}
                 {s?.ended && !finished && <p className="versus__done">Финиш — ждём соперника</p>}

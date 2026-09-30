@@ -7,7 +7,7 @@ import { PALETTE, rgba } from './palette';
 export const PLAYER_COLORS = [PALETTE.cyan, PALETTE.warn] as const;
 
 const GRADE_COLOR: Record<DanceGrade, string> = { perfect: PALETTE.success, good: PALETTE.cyan, miss: PALETTE.error };
-const GRADE_TEXT: Record<DanceGrade, string> = { perfect: 'PERFECT', good: 'GOOD', miss: 'MISS' };
+const GRADE_TEXT: Record<DanceGrade, string> = { perfect: 'ИДЕАЛЬНО', good: 'ХОРОШО', miss: 'МИМО' };
 const FLOATER_MS = 700;
 const TILE_COLORS = [PALETTE.pink, PALETTE.violet, PALETTE.cyan, PALETTE.warn];
 

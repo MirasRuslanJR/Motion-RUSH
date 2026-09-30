@@ -1,29 +1,35 @@
-/* Design tokens — the canvas palette in features/render/palette.ts mirrors these. */
+/*
+ * Design tokens — "human neon": a warm ink background, soft surfaces, and neon
+ * used as an accent (active states, the game scene) rather than everywhere.
+ * The canvas palette in features/render/palette.ts mirrors the neon colours.
+ */
 :root {
   color-scheme: dark;
 
-  --bg: #05060b;
-  --bg-raised: #0b0d16;
-  --surface: rgba(255, 255, 255, 0.035);
-  --surface-2: rgba(255, 255, 255, 0.06);
-  --surface-solid: #0c0e18;
-  --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.16);
+  --bg: #0c0d16;
+  --bg-raised: #13141f;
+  --surface: rgba(255, 255, 255, 0.045);
+  --surface-2: rgba(255, 255, 255, 0.075);
+  --surface-solid: #151726;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.18);
 
-  --text: #eef1fa;
-  --text-2: #a4aac2;
-  --text-3: #6b7189;
+  --text: #f4f1ec;
+  --text-2: #b6b5c6;
+  --text-3: #7f8199;
 
-  --cyan: #2ee6ff;
-  --cyan-soft: rgba(46, 230, 255, 0.14);
-  --violet: #8b5cff;
-  --violet-soft: rgba(139, 92, 255, 0.16);
-  --success: #3dffb0;
-  --success-soft: rgba(61, 255, 176, 0.12);
-  --warn: #ffc14d;
-  --warn-soft: rgba(255, 193, 77, 0.12);
-  --error: #ff5a3d;
-  --error-soft: rgba(255, 90, 61, 0.14);
+  --cyan: #4fdcef;
+  --cyan-soft: rgba(79, 220, 239, 0.13);
+  --violet: #9b85ff;
+  --violet-soft: rgba(155, 133, 255, 0.15);
+  --warm: #ffb48c;
+  --warm-soft: rgba(255, 180, 140, 0.13);
+  --success: #5ee8a8;
+  --success-soft: rgba(94, 232, 168, 0.12);
+  --warn: #ffc76b;
+  --warn-soft: rgba(255, 199, 107, 0.12);
+  --error: #ff6b57;
+  --error-soft: rgba(255, 107, 87, 0.13);
 
   /* Chart marks: validated against the dark surface (OKLCH L inside 0.48–0.67). */
   --chart-series: #0f9fc2;
@@ -33,10 +39,12 @@
   --font-ui: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
 
-  --radius-s: 10px;
-  --radius-m: 16px;
-  --radius-l: 24px;
-  --topbar-h: 60px;
-  --gutter: clamp(16px, 2.4vw, 32px);
+  --radius-s: 12px;
+  --radius-m: 18px;
+  --radius-l: 28px;
+  --shadow-soft: 0 22px 50px -28px rgba(0, 0, 0, 0.85);
+  --glow-cyan: 0 0 24px rgba(79, 220, 239, 0.28);
+  --topbar-h: 64px;
+  --gutter: clamp(16px, 2.6vw, 36px);
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
 }

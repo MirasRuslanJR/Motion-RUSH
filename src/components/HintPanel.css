@@ -48,7 +48,7 @@
   border-radius: 6px;
   background: var(--tone-soft);
   color: var(--tone);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-weight: 600;
   font-size: 11px;
   letter-spacing: 0.14em;
@@ -83,7 +83,7 @@
 .hint__meter-head {
   display: flex;
   justify-content: space-between;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
