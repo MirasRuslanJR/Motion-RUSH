@@ -4,7 +4,7 @@
 
 Admit Hackathon 2026 · кейс «Motion — камера вместо джойстика» · направление **A / GAME**
 
-🔗 **Демо:** _ссылка появится после деплоя_ · работает в Chrome / Edge / Safari / Firefox, на ноутбуке и телефоне, ничего устанавливать не нужно.
+🔗 **Демо: [motion-rush.vercel.app](https://motion-rush.vercel.app)** · работает в Chrome / Edge / Safari / Firefox, на ноутбуке и телефоне, ничего устанавливать не нужно.
 
 ![Лендинг](docs/screenshots/landing.jpg)
 
