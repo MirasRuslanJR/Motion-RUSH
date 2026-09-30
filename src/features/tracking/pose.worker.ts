@@ -57,5 +57,6 @@ function detect(message: Extract<WorkerRequest, { type: 'frame' }>): void {
 scope.onmessage = (event) => {
   const message = event.data;
   if (message.type === 'init') void init(message);
+  else if (message.type === 'options') void core?.setNumPoses(message.numPoses);
   else detect(message);
 };

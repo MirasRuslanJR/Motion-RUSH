@@ -100,6 +100,11 @@ class SoundKit {
     }
   }
 
+  /** Shared audio graph for the dance music (null before the first user gesture). */
+  audio(): { ctx: AudioContext; master: GainNode } | null {
+    return this.ctx && this.master ? { ctx: this.ctx, master: this.master } : null;
+  }
+
   setMuted(muted: boolean): void {
     this.muted = muted;
     if (this.master && this.ctx) this.master.gain.setTargetAtTime(muted ? 0 : 0.6, this.ctx.currentTime, 0.02);

@@ -64,6 +64,11 @@ export interface MotionFrame {
   diagnosis: Diagnosis | null;
   target: Pose | null;
   baseline: Baseline | null;
+  /**
+   * Every detected person (normalised, mirrored), sorted left → right on screen.
+   * Filled only in two-player mode (see setPlayers); otherwise empty.
+   */
+  people: Pose[];
   /** Adaptive rendering quality for this frame (see QualityGovernor). */
   render: QualitySettings;
   renderLevel: QualityLevel;
@@ -151,6 +156,8 @@ export class MotionEngine {
   private othersGoneSince: number | null = null;
   private primaryCenter: { x: number; y: number } | null = null;
   private disposed = false;
+  private players = 1;
+  private readonly peopleBuffers: Pose[] = [createPose(), createPose()];
 
   constructor() {
     this.frame = {
@@ -171,6 +178,7 @@ export class MotionEngine {
       diagnosis: null,
       target: null,
       baseline: null,
+      people: [],
       render: this.quality.settings,
       renderLevel: this.quality.level,
       stats: { fps: 0, inferenceFps: 0, inferenceMs: 0, targetInferenceFps: this.targetFps },
@@ -210,6 +218,7 @@ export class MotionEngine {
       const backend = await loadPoseBackend();
       if (this.disposed) return;
       this.backend = backend;
+      if (this.players !== 1) backend.setNumPoses(this.players);
       this.ui.set({ model: 'ready', delegate: backend.delegate, backend: backend.kind });
     } catch {
       this.ui.set({ model: 'error', camera: 'error', cameraError: 'model' });
@@ -229,6 +238,15 @@ export class MotionEngine {
       : null;
     if (baseline) this.ui.set({ scheme: schemeOf(baseline.mode) });
     this.emit([...this.lateralSM.reset(this.frame.time), ...this.verticalSM.reset(this.frame.time)]);
+  }
+
+  /** 2 = two players share the camera (left / right half). Detecting two people is slower. */
+  setPlayers(players: 1 | 2): void {
+    if (players === this.players) return;
+    this.players = players;
+    this.backend?.setNumPoses(players);
+    this.frame.people = [];
+    this.ui.set({ multiplePeople: false });
   }
 
   /** What the current screen wants from the player; drives the error-mode diagnosis. */
@@ -367,9 +385,19 @@ export class MotionEngine {
     f.stats.inferenceFps = this.inferenceMeter.rate;
     f.stats.targetInferenceFps = this.targetFps;
 
-    // 1. Pick the player, track bystanders.
+    // 1. Pick the player, track bystanders (in two-player mode everybody is a player).
     const selection = selectPrimaryPose(poses, f.aspect, this.primaryCenter);
-    this.updateMultiPerson(selection.significantOthers > 0, now);
+    this.updateMultiPerson(this.players === 1 && selection.significantOthers > 0, now);
+    if (this.players > 1) {
+      const people: Pose[] = [];
+      for (let i = 0; i < poses.length && i < this.peopleBuffers.length; i++) {
+        const raw = poses[i];
+        const buffer = this.peopleBuffers[i];
+        if (raw && buffer) people.push(normalizeLandmarks(raw, f.aspect, true, buffer));
+      }
+      const centerX = (p: Pose) => ((p[11]?.x ?? 0) + (p[12]?.x ?? 0)) / 2;
+      f.people = people.sort((a, b) => centerX(a) - centerX(b));
+    }
 
     // 2. Normalise + smooth, with a short hold on momentary landmark loss.
     const primary = selection.primaryIndex >= 0 ? poses[selection.primaryIndex] : undefined;

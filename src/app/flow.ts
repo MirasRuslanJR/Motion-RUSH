@@ -1,6 +1,6 @@
 import type { CameraErrorKind } from '../features/camera/cameraErrors';
 import type { SessionResult } from '../features/gameplay/types';
-import type { GameModeId } from '../features/modes/modes';
+import { getMode, type GameModeId } from '../features/modes/modes';
 
 /**
  * The whole product is one scenario:
@@ -18,6 +18,7 @@ export type Phase =
   | 'lobby'
   | 'leaderboard'
   | 'game'
+  | 'dance'
   | 'results';
 
 export interface FlowState {
@@ -85,12 +86,14 @@ export function flowReducer(state: FlowState, action: FlowAction): FlowState {
       return state.phase === 'tutorial' ? { ...state, phase: 'modes', tutorialDone: true } : state;
     case 'SELECT_MODE':
       if (action.mode === 'duel') return { ...state, mode: 'duel', phase: 'lobby', duelSeed: null };
+      if (getMode(action.mode).kind === 'dance') return { ...state, mode: action.mode, phase: 'dance', runId: state.runId + 1, duelSeed: null };
       return newRun(state, { mode: action.mode, duelSeed: null });
     case 'DUEL_START':
       return state.phase === 'lobby' ? newRun(state, { mode: 'duel', duelSeed: action.seed }) : state;
     case 'GAME_OVER':
       return state.phase === 'game' ? { ...state, phase: 'results', result: action.result } : state;
     case 'PLAY_AGAIN':
+      if (state.phase === 'dance') return { ...state, runId: state.runId + 1 };
       return state.mode === 'duel' ? { ...state, phase: 'lobby', duelSeed: null } : newRun(state);
     case 'MODES':
       return { ...state, phase: 'modes' };

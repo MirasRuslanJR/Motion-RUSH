@@ -56,11 +56,19 @@ function MoveCard({ title, move, tone, scheme }: { title: string; move: MoveStat
 
 /** idle = the request is on its way (it starts as soon as there is a nickname). */
 type SubmitState = 'idle' | 'sent' | 'failed';
+/** What the global leaderboard needs from a finished run (runner or dance). */
+interface RankedRun {
+  mode: string;
+  score: number;
+  bestCombo: number;
+  scheme: ControlScheme;
+}
+
 /** Results already sent (guards against double effects and remounts). */
-const submitted = new WeakSet<SessionResult>();
+const submitted = new WeakSet<RankedRun>();
 
 /** Sends a ranked run to the global leaderboard (asks for a nickname first). */
-function GlobalSubmit({ result, accuracy, profile, onProfile, onLeaderboard }: { result: SessionResult; accuracy: number; profile: Profile; onProfile: (p: Profile) => void; onLeaderboard: () => void }) {
+export function GlobalSubmit({ result, accuracy, profile, onProfile, onLeaderboard }: { result: RankedRun; accuracy: number; profile: Profile; onProfile: (p: Profile) => void; onLeaderboard: () => void }) {
   const [state, setState] = useState<SubmitState>(() => (submitted.has(result) ? 'sent' : 'idle'));
   const name = profile.nickname;
 

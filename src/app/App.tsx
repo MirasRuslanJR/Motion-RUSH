@@ -17,6 +17,7 @@ import { loadProfile, recordSession, saveMuted, type Profile, type RecordedSessi
 import { CalibrationScreen } from '../screens/CalibrationScreen';
 import { CameraCheckScreen } from '../screens/CameraCheckScreen';
 import { CameraErrorScreen } from '../screens/CameraErrorScreen';
+import { DanceScreen, type DanceRunResult } from '../screens/dance/DanceScreen';
 import { DuelLobbyScreen } from '../screens/DuelLobbyScreen';
 import { GameScreen } from '../screens/game/GameScreen';
 import { LandingScreen } from '../screens/LandingScreen';
@@ -164,6 +165,19 @@ export function App() {
     dispatch({ type: 'GAME_OVER', result });
   }, []);
 
+  const onDanceRecord = useCallback((run: DanceRunResult): RecordedSession | null => {
+    if (!getMode(run.mode).ranked) return null;
+    const saved = recordSession(run.mode, {
+      score: run.score,
+      accuracy: run.accuracy,
+      bestCombo: run.bestCombo,
+      outcome: 'complete',
+      date: new Date().toISOString(),
+    });
+    setProfile(saved.profile);
+    return saved;
+  }, []);
+
   const goHome = useCallback(() => {
     replaceEngine(null);
     setProfile(loadProfile());
@@ -211,6 +225,23 @@ export function App() {
             onSelect={onSelectMode}
             onLeaderboard={onLeaderboard}
             onProfile={setProfile}
+          />
+        );
+      }
+      break;
+    case 'dance':
+      if (engine) {
+        screen = (
+          <DanceScreen
+            key={flow.runId}
+            engine={engine}
+            mode={getMode(flow.mode)}
+            profile={profile}
+            onRecord={onDanceRecord}
+            onProfile={setProfile}
+            onAgain={onPlayAgain}
+            onModes={onModes}
+            onLeaderboard={onLeaderboard}
           />
         );
       }
@@ -272,7 +303,7 @@ export function App() {
         <div className="app__screens">
           <AnimatePresence initial={false}>
             <motion.div
-              key={flow.phase === 'game' ? `game-${flow.runId}` : flow.phase}
+              key={flow.phase === 'game' || flow.phase === 'dance' ? `${flow.phase}-${flow.runId}` : flow.phase}
               className="app__screen"
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}

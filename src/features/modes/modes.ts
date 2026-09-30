@@ -193,10 +193,10 @@ const ALL_MODES: readonly GameModeDef[] = [
 ];
 
 /** Modes shown in the menu. */
-export const GAME_MODES: readonly GameModeDef[] = ALL_MODES.filter((m) => m.kind === 'runner');
+export const GAME_MODES: readonly GameModeDef[] = ALL_MODES;
 
 export function getMode(id: string): GameModeDef {
-  return GAME_MODES.find((m) => m.id === id) ?? (GAME_MODES[0] as GameModeDef);
+  return ALL_MODES.find((m) => m.id === id) ?? (ALL_MODES[0] as GameModeDef);
 }
 
 export function randomSeed(): number {

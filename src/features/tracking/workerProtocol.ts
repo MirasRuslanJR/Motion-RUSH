@@ -3,7 +3,9 @@ import type { AssetSource, Delegate } from './landmarkerCore';
 /** Messages between the main thread and pose.worker.ts. */
 export type WorkerRequest =
   | { type: 'init'; sources: AssetSource[]; filterLogs: boolean; delegate: Delegate | null }
-  | { type: 'frame'; frame: VideoFrame | ImageBitmap; timestamp: number };
+  | { type: 'frame'; frame: VideoFrame | ImageBitmap; timestamp: number }
+  /** How many people to detect (1 = fast single-player tracking, 2 = two players). */
+  | { type: 'options'; numPoses: number };
 
 export type WorkerResponse =
   | { type: 'ready'; delegate: Delegate }

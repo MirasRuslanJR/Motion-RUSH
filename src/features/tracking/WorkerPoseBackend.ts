@@ -104,6 +104,10 @@ class WorkerChannel {
     );
   }
 
+  setNumPoses(numPoses: number): void {
+    if (!this.dead) this.worker.postMessage({ type: 'options', numPoses } satisfies WorkerRequest);
+  }
+
   terminate(): void {
     this.dead = true;
     this.clear();
@@ -181,6 +185,10 @@ export class WorkerPoseBackend implements PoseBackend {
 
   get busy(): boolean {
     return this.channel.busy;
+  }
+
+  setNumPoses(numPoses: number): void {
+    this.channel.setNumPoses(numPoses);
   }
 
   submit(video: HTMLVideoElement, capturedAt: number, callbacks: PoseCallbacks): void {

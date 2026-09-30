@@ -92,6 +92,7 @@ export class LandmarkerCore {
   private readonly gpuTimings: number[] = [];
   private gpuVerified = false;
   private readonly pinned: boolean;
+  private numPoses: number = TRACKING_CONFIG.numPoses;
 
   private constructor(landmarker: PoseLandmarker, source: AssetSource, delegate: Delegate, useModule: boolean, pinned: boolean) {
     this.landmarker = landmarker;
@@ -105,6 +106,17 @@ export class LandmarkerCore {
 
   get delegate(): Delegate {
     return this.currentDelegate;
+  }
+
+  /** 1 = single player (fast), 2 = two players in front of one camera. */
+  async setNumPoses(numPoses: number): Promise<void> {
+    if (numPoses === this.numPoses) return;
+    this.numPoses = numPoses;
+    try {
+      await this.landmarker.setOptions({ numPoses });
+    } catch {
+      // Keep the previous setting.
+    }
   }
 
   /** Consecutive failed detections (0 after any success). */
@@ -176,6 +188,7 @@ export class LandmarkerCore {
     this.switching = true;
     try {
       const next = await createLandmarker(this.source, 'CPU', this.useModule);
+      if (this.numPoses !== TRACKING_CONFIG.numPoses) await next.setOptions({ numPoses: this.numPoses });
       this.landmarker.close();
       this.landmarker = next;
       this.currentDelegate = 'CPU';

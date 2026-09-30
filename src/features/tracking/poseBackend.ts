@@ -26,6 +26,8 @@ export interface PoseBackend {
   /** A frame is in flight — do not submit another one. */
   readonly busy: boolean;
   submit(video: HTMLVideoElement, capturedAt: number, callbacks: PoseCallbacks): void;
+  /** 1 = one player (fast tracking), 2 = two players in one frame. */
+  setNumPoses(numPoses: number): void;
 }
 
 export function assetSources(): AssetSource[] {
@@ -48,6 +50,10 @@ class MainThreadBackend implements PoseBackend {
 
   get delegate(): Delegate {
     return this.core.delegate;
+  }
+
+  setNumPoses(numPoses: number): void {
+    void this.core.setNumPoses(numPoses);
   }
 
   submit(video: HTMLVideoElement, capturedAt: number, callbacks: PoseCallbacks): void {
