@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { CameraViewport } from '../components/CameraViewport';
 import { HoldGesture } from '../components/HoldGesture';
 import { Icon } from '../components/Icon';
+import { ModeIcon } from '../components/ModeIcon';
 import { NicknameField } from '../components/NicknameField';
 import { GESTURE_CONFIG } from '../config/gesture.config';
 import type { MotionEngine } from '../features/engine/MotionEngine';
 import { lateralOffset } from '../features/gestures/thresholds';
-import { GAME_MODES, type GameModeDef, type GameModeId } from '../features/modes/modes';
+import { GAME_MODES, MODE_CATEGORIES, type GameModeDef, type GameModeId, type ModeCategory } from '../features/modes/modes';
 import { useEngineFrame, useGestureEvents, useMotionUi } from '../hooks/useEngine';
 import { sfx } from '../lib/audio/sfx';
 import { loopOffset, mod, releaseVelocity, swipeSteps } from '../lib/carousel';
@@ -47,7 +48,6 @@ function metaOf(mode: GameModeDef): string {
   return parts.join(' · ');
 }
 
-const N = GAME_MODES.length;
 const GAP = 18;
 /** Cards further than this from the centre are hidden (they may jump around the loop). */
 const VISIBLE_RANGE = 2.6;
@@ -85,18 +85,29 @@ function vibrate(): void {
  */
 export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLeaderboard, onProfile }: ModeSelectScreenProps) {
   const scheme = useMotionUi(engine, (s) => s.scheme);
+  const [category, setCategory] = useState<ModeCategory | 'all'>('all');
+  const list = useMemo(() => (category === 'all' ? GAME_MODES : GAME_MODES.filter((m) => m.category === category)), [category]);
+  const N = list.length;
   const [index, setIndex] = useState(() => Math.max(0, GAME_MODES.findIndex((m) => m.id === initialMode)));
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [stepPx, setStepPx] = useState(340 + GAP);
   const drag = useRef<Drag | null>(null);
   const wheel = useRef({ acc: 0, last: 0 });
-  const cardRef = useRef<HTMLElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const markerRef = useRef<HTMLSpanElement>(null);
   const hold = useRef<{ since: number | null; last: number }>({ since: null, last: 0 });
   const armedAt = useRef(Number.POSITIVE_INFINITY);
   const selected = mod(index, N);
-  const mode = GAME_MODES[selected] ?? (GAME_MODES[0] as GameModeDef);
+  const mode = list[selected] ?? (list[0] as GameModeDef);
+
+  /** A category chip narrows the carousel; the current mode stays selected if it is in the group. */
+  const pickCategory = (next: ModeCategory | 'all') => {
+    const nextList = next === 'all' ? GAME_MODES : GAME_MODES.filter((m) => m.category === next);
+    setCategory(next);
+    setIndex(Math.max(0, nextList.findIndex((m) => m.id === mode.id)));
+    sfx.play('step');
+  };
   const blocked = unavailable(mode, profile);
 
   const go = useCallback((step: number) => {
@@ -121,15 +132,19 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
   }, [engine]);
 
   // Card width follows the viewport (CSS clamps it); measure it for the swipe maths.
+  // Measured on any rendered card — the set of cards changes with the category filter.
   useLayoutEffect(() => {
-    const el = cardRef.current;
-    if (!el) return;
-    const measure = () => setStepPx(el.offsetWidth + GAP);
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const measure = () => {
+      const card = viewport.querySelector<HTMLElement>('.mode-card');
+      if (card && card.offsetWidth > 0) setStepPx(card.offsetWidth + GAP);
+    };
     measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(el);
+    observer.observe(viewport);
     return () => observer.disconnect();
-  }, []);
+  }, [list]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -142,7 +157,7 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [go, start, mode]);
+  }, [go, start, mode, N]);
 
   useGestureEvents(engine, (event) => {
     if (event.phase !== 'start' || event.timestamp < armedAt.current) return;
@@ -252,6 +267,13 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
         <p className="t-label">
           Выбери режим · {selected + 1} / {N} · {scheme === 'body' ? 'всё тело' : 'сидя'}
         </p>
+        <div className="modes__filters" role="group" aria-label="Категории режимов">
+          {([{ id: 'all', title: 'Все' }, ...MODE_CATEGORIES] as const).map((c) => (
+            <button key={c.id} type="button" className={category === c.id ? 'chip is-active' : 'chip'} onClick={() => pickCategory(c.id)} aria-pressed={category === c.id}>
+              {c.title}
+            </button>
+          ))}
+        </div>
         <p className="sr-only" aria-live="polite">
           {mode.title}. {mode.tagline}
         </p>
@@ -261,6 +283,7 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
             <Icon name="left" size={22} />
           </button>
           <div
+            ref={viewportRef}
             className={`carousel__viewport ${dragging ? 'is-dragging' : ''}`}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -280,7 +303,7 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
               }
             }}
           >
-            {GAME_MODES.map((m, i) => {
+            {list.map((m, i) => {
               const why = unavailable(m, profile);
               const best = bestFor(profile, m.id);
               const pos = loopOffset(i, selected, N) + dragX / stepPx;
@@ -296,7 +319,6 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
               return (
                 <article
                   key={m.id}
-                  ref={i === 0 ? (el) => void (cardRef.current = el) : undefined}
                   data-index={i}
                   className={`mode-card ${i === selected ? 'is-selected' : ''} ${why ? 'is-locked' : ''}`}
                   style={style}
@@ -304,7 +326,12 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
                   aria-hidden={hidden}
                   aria-label={m.title}
                 >
-                  <span className="mode-card__badge">{m.badge}</span>
+                  <span className="mode-card__head">
+                    <span className="mode-card__icon">
+                      <ModeIcon name={m.icon} size={26} />
+                    </span>
+                    <span className="mode-card__badge">{m.badge}</span>
+                  </span>
                   <span className="mode-card__title">{m.title}</span>
                   <span className="mode-card__tagline">{m.tagline}</span>
                   <span className="mode-card__goal">{m.goal}</span>
@@ -322,7 +349,7 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
         </div>
 
         <div className="carousel__dots" role="tablist" aria-label="Все режимы">
-          {GAME_MODES.map((m, i) => (
+          {list.map((m, i) => (
             <button
               key={m.id}
               type="button"

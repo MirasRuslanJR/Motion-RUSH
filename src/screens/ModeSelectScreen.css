@@ -46,6 +46,40 @@
   min-width: 0;
 }
 
+/* ── Category filter ── */
+.modes__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    color 0.2s,
+    background 0.2s,
+    border-color 0.2s;
+}
+
+.chip:hover {
+  color: var(--text);
+  border-color: var(--text-2);
+}
+
+.chip.is-active {
+  color: #0c0d16;
+  background: var(--text);
+  border-color: var(--text);
+}
+
 /* ── Carousel: an endless loop, every card positioned from its distance to the centre ── */
 .carousel {
   --card-w: min(340px, 74vw);
@@ -58,7 +92,7 @@
   position: relative;
   flex: 1;
   min-width: 0;
-  height: 300px;
+  height: 326px;
   overflow: hidden;
   touch-action: pan-y;
   cursor: grab;
@@ -146,7 +180,7 @@
 }
 
 .carousel__zone {
-  padding: 5px 0;
+  padding: 5px 0 14px;
   text-align: center;
 }
 
@@ -157,12 +191,12 @@
 
 .carousel__marker {
   position: absolute;
-  top: 50%;
+  bottom: 3px;
   left: 50%;
-  width: 12px;
-  height: 12px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  translate: -50% -50%;
+  translate: -50% 0;
   background: var(--cyan);
   box-shadow: 0 0 12px var(--cyan);
   opacity: 0;
@@ -187,7 +221,7 @@
   align-content: start;
   gap: 10px;
   width: var(--card-w);
-  height: 250px;
+  height: 276px;
   padding: 24px 22px 20px;
   border-radius: var(--radius-l);
   border: 1px solid var(--line);
@@ -227,6 +261,24 @@
     transition: opacity 0.2s;
   }
 }
+.mode-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mode-card__icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
 .mode-card__badge {
   justify-self: start;
   padding: 3px 9px;
@@ -291,10 +343,10 @@
     display: none;
   }
   .carousel__viewport {
-    height: 262px;
+    height: 290px;
   }
   .mode-card {
-    height: 226px;
+    height: 252px;
     padding: 20px 18px 16px;
   }
   .modes__start {

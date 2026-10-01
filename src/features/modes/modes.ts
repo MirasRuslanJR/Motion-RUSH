@@ -19,8 +19,36 @@ export type GameModeId =
   | 'versus'
   | 'duel';
 
+/** Groups for the mode picker. */
+export type ModeCategory = 'run' | 'dance' | 'duo' | 'online';
+
+export const MODE_CATEGORIES: { id: ModeCategory; title: string }[] = [
+  { id: 'run', title: 'Бег' },
+  { id: 'dance', title: 'Танцы' },
+  { id: 'duo', title: 'Вдвоём' },
+  { id: 'online', title: 'Онлайн' },
+];
+
+export type ModeIconName =
+  | 'run'
+  | 'infinity'
+  | 'bolt'
+  | 'stopwatch'
+  | 'calendar'
+  | 'updown'
+  | 'lanes'
+  | 'heart'
+  | 'target'
+  | 'note'
+  | 'notes'
+  | 'duo'
+  | 'globe';
+
 export interface GameModeDef {
   id: GameModeId;
+  category: ModeCategory;
+  /** Pictogram on the mode card. */
+  icon: ModeIconName;
   /** runner = obstacle course; dance = dance floor (match poses to the beat). */
   kind: 'runner' | 'dance';
   /** 2 = two players in front of one camera (left / right half of the frame). */
@@ -52,6 +80,8 @@ const ALL_MODES: readonly GameModeDef[] = [
   {
     ...RUNNER,
     id: 'classic',
+    category: 'run',
+    icon: 'run',
     title: 'Classic Run',
     badge: 'НАЧНИ ОТСЮДА',
     tagline: '70 секунд, 4 фазы скорости, каждый раз новая трасса',
@@ -63,6 +93,8 @@ const ALL_MODES: readonly GameModeDef[] = [
   {
     ...RUNNER,
     id: 'dance',
+    category: 'dance',
+    icon: 'note',
     kind: 'dance',
     title: 'Dance Floor',
     badge: 'НОВОЕ',
@@ -75,6 +107,8 @@ const ALL_MODES: readonly GameModeDef[] = [
   {
     ...RUNNER,
     id: 'dance-duo',
+    category: 'duo',
+    icon: 'notes',
     kind: 'dance',
     players: 2,
     title: 'Dance Battle',
@@ -89,6 +123,8 @@ const ALL_MODES: readonly GameModeDef[] = [
   {
     ...RUNNER,
     id: 'versus',
+    category: 'duo',
+    icon: 'duo',
     players: 2,
     title: 'Versus 2P',
     badge: '2 ИГРОКА',
@@ -102,6 +138,8 @@ const ALL_MODES: readonly GameModeDef[] = [
   {
     ...RUNNER,
     id: 'endless',
+    category: 'run',
+    icon: 'infinity',
     title: 'Endless',
     badge: 'ВЫЖИВАНИЕ',
     tagline: 'Скорость растёт бесконечно — продержись как можно дольше',
@@ -113,6 +151,8 @@ const ALL_MODES: readonly GameModeDef[] = [
   {
     ...RUNNER,
     id: 'blitz',
+    category: 'run',
+    icon: 'bolt',
     title: 'Blitz',
     badge: 'СКОРОСТЬ',
     tagline: '45 секунд на максимальной скорости с первой секунды',
@@ -124,6 +164,8 @@ const ALL_MODES: readonly GameModeDef[] = [
   {
     ...RUNNER,
     id: 'sprint',
+    category: 'run',
+    icon: 'stopwatch',
     title: 'Sprint 30',
     badge: 'КОРОТКИЙ',
     tagline: '30 секунд без разгона — максимум очков',
@@ -135,6 +177,8 @@ const ALL_MODES: readonly GameModeDef[] = [
   {
     ...RUNNER,
     id: 'daily',
+    category: 'run',
+    icon: 'calendar',
     title: 'Daily Challenge',
     badge: 'ДЕНЬ',
     tagline: 'Новая трасса каждый день — одна для всех игроков',
@@ -147,6 +191,8 @@ const ALL_MODES: readonly GameModeDef[] = [
   {
     ...RUNNER,
     id: 'jumpduck',
+    category: 'run',
+    icon: 'updown',
     title: 'Jump & Squat',
     badge: 'ТРЕНИРОВКА НОГ',
     tagline: 'Только барьеры и лучи: прыжки и приседания без остановки',
@@ -158,6 +204,8 @@ const ALL_MODES: readonly GameModeDef[] = [
   {
     ...RUNNER,
     id: 'lanes',
+    category: 'run',
+    icon: 'lanes',
     title: 'Lane Rush',
     badge: 'ДВИЖЕНИЕ',
     tagline: 'Только ворота: перебегай между полосами влево-вправо',
@@ -169,6 +217,8 @@ const ALL_MODES: readonly GameModeDef[] = [
   {
     ...RUNNER,
     id: 'hardcore',
+    category: 'run',
+    icon: 'heart',
     title: 'Hardcore',
     badge: 'ЭКСПЕРТ',
     tagline: 'Одна жизнь. Одна ошибка — и всё',
@@ -180,6 +230,8 @@ const ALL_MODES: readonly GameModeDef[] = [
   {
     ...RUNNER,
     id: 'practice',
+    category: 'run',
+    icon: 'target',
     title: 'Practice',
     badge: 'ОБУЧЕНИЕ',
     tagline: 'Медленно и без штрафов — учись движениям с подсказками',
@@ -193,6 +245,8 @@ const ALL_MODES: readonly GameModeDef[] = [
   {
     ...RUNNER,
     id: 'duel',
+    category: 'online',
+    icon: 'globe',
     title: 'Online Duel',
     badge: 'ОНЛАЙН',
     tagline: 'Гонка 1 на 1 по сети: одна трасса, кто наберёт больше',
