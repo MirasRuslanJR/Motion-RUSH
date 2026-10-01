@@ -39,7 +39,7 @@ export function LeaderboardScreen({ profile, initialMode, onBack }: LeaderboardS
       <header className="board-screen__head">
         <div>
           <p className="t-label">Рейтинг игроков</p>
-          <h1 className="t-headline">Leaderboard</h1>
+          <h1 className="t-headline">Лучшие результаты</h1>
         </div>
         <button type="button" className="btn btn--ghost btn--small" onClick={onBack}>
           <Icon name="left" size={16} /> Назад

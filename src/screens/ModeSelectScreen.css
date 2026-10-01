@@ -342,6 +342,17 @@
   .carousel__arrow {
     display: none;
   }
+  /* One swipeable row of chips instead of wrapping. */
+  .modes__filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 calc(var(--gutter) * -1);
+    padding: 0 var(--gutter);
+  }
+  .chip {
+    flex: none;
+  }
   .carousel__viewport {
     height: 290px;
   }
