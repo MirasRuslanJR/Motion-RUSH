@@ -48,18 +48,10 @@ interface DanceScreenProps {
 
 type Stage = 'waiting' | 'playing' | 'done';
 
-/** Two players: whoever stands in the left half of the picture is P1. */
+/** Two players: P1 = left half of the picture, P2 = right half (each has its own tracker). */
 function assignPlayers(frame: Readonly<MotionFrame>, players: number): (Pose | null)[] {
   if (players === 1) return [frame.trackable ? frame.pose : null];
-  const slots: (Pose | null)[] = [null, null];
-  const mid = frame.aspect / 2;
-  for (const p of frame.people) {
-    const x = ((p[11]?.x ?? 0) + (p[12]?.x ?? 0)) / 2;
-    const side = x < mid ? 0 : 1;
-    if (!slots[side]) slots[side] = p;
-    else if (!slots[1 - side]) slots[1 - side] = p;
-  }
-  return slots;
+  return [frame.players[0] ?? null, frame.players[1] ?? null];
 }
 
 function poseName(id: string): string {
@@ -80,6 +72,8 @@ function strongestAndWeakest(d: DancerState): { best: string | null; worst: stri
 }
 
 interface Hud {
+  visible: boolean[];
+  loading: boolean;
   scores: number[];
   combos: number[];
   multipliers: number[];
@@ -98,6 +92,8 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
   const [stage, setStage] = useState<Stage>('waiting');
   const stageRef = useRef<Stage>('waiting');
   const [hud, setHud] = useState<Hud>(() => ({
+    visible: Array.from({ length: players }, () => false),
+    loading: players === 2,
     scores: Array.from({ length: players }, () => 0),
     combos: Array.from({ length: players }, () => 0),
     multipliers: Array.from({ length: players }, () => 1),
@@ -171,6 +167,8 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
 
     const introBeat = Math.floor(songTime / BEAT_MS);
     const next: Hud = {
+      visible: poses.map((p) => p !== null),
+      loading: players === 2 && frame.twoPlayer === 'loading',
       scores: dance.dancers.map((d) => d.score),
       combos: dance.dancers.map((d) => d.combo),
       multipliers: dance.dancers.map((_, i) => dance.multiplier(i)),
@@ -181,6 +179,8 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
     const prev = hudRef.current;
     const changed =
       next.countdown !== prev.countdown ||
+      next.loading !== prev.loading ||
+      next.visible.some((v, i) => v !== prev.visible[i]) ||
       next.scores.some((v, i) => v !== prev.scores[i]) ||
       next.combos.some((v, i) => v !== prev.combos[i]) ||
       next.hints.some((v, i) => v !== prev.hints[i]);
@@ -210,7 +210,7 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
                 <strong>{s.toLocaleString('ru-RU')}</strong>
                 {(hud.combos[i] ?? 0) >= 3 && (
                   <span className="dance__combo">
-                    {hud.combos[i]} combo · ×{hud.multipliers[i]}
+                    комбо {hud.combos[i]} · ×{hud.multipliers[i]}
                   </span>
                 )}
               </div>
@@ -238,6 +238,19 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
             <motion.div key="wait" className="overlay dance__overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <p className="t-label">{mode.title}</p>
               <h2 className="t-headline">{players === 2 ? 'Встаньте вдвоём: один слева, другой справа' : 'Встань в кадр — музыка начнётся сама'}</h2>
+              {players === 2 && (
+                <div className="dance__who">
+                  {hud.loading ? (
+                    <span className="dance__who-loading">Включаем распознавание для двоих…</span>
+                  ) : (
+                    hud.visible.map((v, i) => (
+                      <span key={i} className={v ? 'dance__who-chip is-on' : 'dance__who-chip'} style={{ '--pc': PLAYER_COLORS[i] } as CSSProperties}>
+                        Игрок {i + 1}: {v ? 'вижу ✓' : 'не вижу'}
+                      </span>
+                    ))
+                  )}
+                </div>
+              )}
               <p className="overlay__message">Повторяй позу с карточки, когда она доедет до розовой рамки. Руки — главное.</p>
             </motion.div>
           )}
@@ -274,7 +287,7 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
                     {players > 1 && <span className="t-label">Игрок {i + 1}</span>}
                     <strong className="dance__card-score">{d.score.toLocaleString('ru-RU')}</strong>
                     <span>
-                      Точность {Math.round(danceAccuracy(d) * 100)}% · perfect {d.perfect} · good {d.good} · miss {d.miss}
+                      Точность {Math.round(danceAccuracy(d) * 100)}% · идеально {d.perfect} · хорошо {d.good} · мимо {d.miss}
                     </span>
                     <span>Лучшее комбо: {d.bestCombo}</span>
                     {best && <span>Лучше всего: {best}</span>}

@@ -20,6 +20,7 @@ import { QualityGovernor } from '../render/quality';
 import { MotionSmoother } from '../tracking/MotionSmoother';
 import { loadPoseBackend, type PoseBackend, type PoseCallbacks, type PoseResult } from '../tracking/poseBackend';
 import { selectPrimaryPose } from '../tracking/poseSelection';
+import { splitBySide, type TwoPlayerTracking } from '../tracking/splitTracking';
 
 /** Low-frequency state for React. Changes a few times per second at most. */
 export interface MotionUiState {
@@ -65,10 +66,13 @@ export interface MotionFrame {
   target: Pose | null;
   baseline: Baseline | null;
   /**
-   * Every detected person (normalised, mirrored), sorted left → right on screen.
-   * Filled only in two-player mode (see setPlayers); otherwise empty.
+   * Two-player mode (see setPlayers): [P1, P2] — P1 stands in the left half of the
+   * mirrored picture, P2 in the right half; null = that player is not visible.
+   * Empty in single-player mode.
    */
-  people: Pose[];
+  players: (Pose | null)[];
+  /** How two-player tracking currently runs ('loading' while the second tracker starts). */
+  twoPlayer: TwoPlayerTracking;
   /** Adaptive rendering quality for this frame (see QualityGovernor). */
   render: QualitySettings;
   renderLevel: QualityLevel;
@@ -149,6 +153,7 @@ export class MotionEngine {
   private lastVideoTime = -1;
   private lastSeenAt = 0;
   private lastLightSampleAt = 0;
+  private lastPlayCheckAt = 0;
   private targetFps: number = TRACKING_CONFIG.inference.maxFps;
   private lastRateChangeAt = 0;
   private avgInferenceMs = 0;
@@ -178,7 +183,8 @@ export class MotionEngine {
       diagnosis: null,
       target: null,
       baseline: null,
-      people: [],
+      players: [],
+      twoPlayer: 'off',
       render: this.quality.settings,
       renderLevel: this.quality.level,
       stats: { fps: 0, inferenceFps: 0, inferenceMs: 0, targetInferenceFps: this.targetFps },
@@ -195,6 +201,11 @@ export class MotionEngine {
 
   ensureVideoPlaying(): void {
     this.camera.ensurePlaying();
+  }
+
+  /** Keep the camera running while no viewport shows it (see CameraSource.park). */
+  parkVideo(): void {
+    this.camera.park();
   }
 
   /** Opens the camera, starts the loop and attaches the (pre)loaded pose model. */
@@ -218,7 +229,7 @@ export class MotionEngine {
       const backend = await loadPoseBackend();
       if (this.disposed) return;
       this.backend = backend;
-      if (this.players !== 1) backend.setNumPoses(this.players);
+      if (this.players !== 1) backend.setSplit(true);
       this.ui.set({ model: 'ready', delegate: backend.delegate, backend: backend.kind });
     } catch {
       this.ui.set({ model: 'error', camera: 'error', cameraError: 'model' });
@@ -240,12 +251,16 @@ export class MotionEngine {
     this.emit([...this.lateralSM.reset(this.frame.time), ...this.verticalSM.reset(this.frame.time)]);
   }
 
-  /** 2 = two players share the camera (left / right half). Detecting two people is slower. */
+  /**
+   * 2 = two players share the camera: P1 in the left half, P2 in the right half,
+   * each with their own tracker. Two trackers cost about twice the inference time.
+   */
   setPlayers(players: 1 | 2): void {
     if (players === this.players) return;
     this.players = players;
-    this.backend?.setNumPoses(players);
-    this.frame.people = [];
+    this.backend?.setSplit(players === 2);
+    this.frame.players = players === 2 ? [null, null] : [];
+    this.frame.twoPlayer = players === 2 ? 'loading' : 'off';
     this.ui.set({ multiplePeople: false });
   }
 
@@ -295,6 +310,11 @@ export class MotionEngine {
     }
 
     this.frame.time = now;
+    // Safety net: a paused camera means frozen tracking — resume it.
+    if (now - this.lastPlayCheckAt > 1000) {
+      this.lastPlayCheckAt = now;
+      if (this.camera.video.paused) this.camera.ensurePlaying();
+    }
     if (this.shouldInfer(now)) this.requestInference(now);
     // Worker results arrive between frames; the main-thread backend answers inside requestInference.
     this.frame.inferred = this.resultArrived;
@@ -388,16 +408,7 @@ export class MotionEngine {
     // 1. Pick the player, track bystanders (in two-player mode everybody is a player).
     const selection = selectPrimaryPose(poses, f.aspect, this.primaryCenter);
     this.updateMultiPerson(this.players === 1 && selection.significantOthers > 0, now);
-    if (this.players > 1) {
-      const people: Pose[] = [];
-      for (let i = 0; i < poses.length && i < this.peopleBuffers.length; i++) {
-        const raw = poses[i];
-        const buffer = this.peopleBuffers[i];
-        if (raw && buffer) people.push(normalizeLandmarks(raw, f.aspect, true, buffer));
-      }
-      const centerX = (p: Pose) => ((p[11]?.x ?? 0) + (p[12]?.x ?? 0)) / 2;
-      f.people = people.sort((a, b) => centerX(a) - centerX(b));
-    }
+    if (this.players > 1) this.assignPlayers(result);
 
     // 2. Normalise + smooth, with a short hold on momentary landmark loss.
     const primary = selection.primaryIndex >= 0 ? poses[selection.primaryIndex] : undefined;
@@ -469,6 +480,29 @@ export class MotionEngine {
       ...(hintChanged ? { hint: this.hints.current } : {}),
     });
     this.emit(events);
+  }
+
+  /** Two-player mode: put each detected person into the P1 / P2 slot. */
+  private assignPlayers(result: PoseResult): void {
+    const f = this.frame;
+    const { poses, slots } = result;
+    f.twoPlayer = result.split ?? 'shared';
+    const out: (Pose | null)[] = [null, null];
+    if (slots) {
+      // Split tracking: the worker already knows whose crop each pose came from.
+      poses.forEach((raw, i) => {
+        const slot = slots[i];
+        const buffer = slot === 0 || slot === 1 ? this.peopleBuffers[slot] : undefined;
+        if (slot !== undefined && buffer) out[slot] = normalizeLandmarks(raw, f.aspect, true, buffer);
+      });
+    } else if (f.twoPlayer === 'shared') {
+      // One shared tracker: sort by side, never one person for both.
+      const people = poses.slice(0, 2).map((raw, i) => normalizeLandmarks(raw, f.aspect, true, this.peopleBuffers[i] ?? createPose()));
+      const [p1, p2] = splitBySide(people, f.aspect);
+      out[0] = p1;
+      out[1] = p2;
+    }
+    f.players = out;
   }
 
   private updateMultiPerson(othersPresent: boolean, now: number): void {

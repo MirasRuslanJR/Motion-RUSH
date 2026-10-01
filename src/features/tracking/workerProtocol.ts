@@ -1,11 +1,12 @@
 import type { AssetSource, Delegate } from './landmarkerCore';
+import type { TwoPlayerTracking } from './splitTracking';
 
 /** Messages between the main thread and pose.worker.ts. */
 export type WorkerRequest =
   | { type: 'init'; sources: AssetSource[]; filterLogs: boolean; delegate: Delegate | null }
   | { type: 'frame'; frame: VideoFrame | ImageBitmap; timestamp: number }
-  /** How many people to detect (1 = fast single-player tracking, 2 = two players). */
-  | { type: 'options'; numPoses: number };
+  /** Two players: track the left and right part of the picture separately. */
+  | { type: 'split'; enabled: boolean };
 
 export type WorkerResponse =
   | { type: 'ready'; delegate: Delegate }
@@ -22,5 +23,8 @@ export type WorkerResponse =
       skipped: boolean;
       /** The landmarker could not read this kind of frame (switch input type). */
       inputRejected: boolean;
+      /** Two-player mode: player slot (0 = P1, 1 = P2) of each packed pose. */
+      slots?: number[];
+      split: TwoPlayerTracking;
     }
   | { type: 'fatal'; message: string };

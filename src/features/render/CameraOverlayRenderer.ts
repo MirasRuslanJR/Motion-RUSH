@@ -8,6 +8,9 @@ import { coverMapping, mapLen, mapX, mapY, observeCanvas, type ViewMapping } fro
 import { PALETTE, rgba } from './palette';
 import { drawArrow, drawSkeleton, MotionTrail, type Projector } from './skeletonRenderer';
 
+/** P1 / P2 colours (the same as on the game screens). */
+const PLAYER_TINTS = [PALETTE.cyan, PALETTE.warn] as const;
+
 const GESTURE_PARTS: Record<GestureType, BodyPart[]> = {
   LEAN_LEFT: ['shoulders', 'torso'],
   LEAN_RIGHT: ['shoulders', 'torso'],
@@ -71,6 +74,10 @@ export class CameraOverlayRenderer {
     if (!ctx) return;
     this.sizing.setMaxDpr(frame.render.maxDpr);
     const { width, height, dpr } = this.sizing.size;
+    if (frame.players.length > 0) {
+      this.renderPlayers(ctx, frame, now, width, height, dpr);
+      return;
+    }
     const pose = frame.displayPose;
 
     if (!pose) {
@@ -120,6 +127,43 @@ export class CameraOverlayRenderer {
       errorJoints: errorMode ? this.errorJoints : undefined,
       pulse: (now % 900) / 900,
       glow: frame.render.glow,
+    });
+  }
+
+  /**
+   * Two-player mode: both skeletons in their player colours, each half of the
+   * picture softly tinted, and the middle line both players must not cross.
+   */
+  private renderPlayers(ctx: CanvasRenderingContext2D, frame: Readonly<MotionFrame>, now: number, width: number, height: number, dpr: number): void {
+    const resized = width !== this.lastWidth || height !== this.lastHeight || dpr !== this.lastDpr;
+    if (!resized && now - this.lastDrawAt < frame.render.overlayIntervalMs - 1) return;
+    this.lastDrawAt = now;
+    this.lastWidth = width;
+    this.lastHeight = height;
+    this.lastDpr = dpr;
+    this.cleared = false;
+    this.trail.clear();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    this.mapping = coverMapping(width, height, frame.videoWidth || 640, frame.videoHeight || 480);
+    const mid = this.projector.x(frame.aspect / 2);
+    ctx.save();
+    ctx.globalAlpha = 0.07;
+    ctx.fillStyle = PLAYER_TINTS[0];
+    ctx.fillRect(0, 0, mid, height);
+    ctx.fillStyle = PLAYER_TINTS[1];
+    ctx.fillRect(mid, 0, width - mid, height);
+    ctx.globalAlpha = 0.6;
+    ctx.strokeStyle = PALETTE.white;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath();
+    ctx.moveTo(mid, 0);
+    ctx.lineTo(mid, height);
+    ctx.stroke();
+    ctx.restore();
+    frame.players.forEach((pose, i) => {
+      if (pose) drawSkeleton(ctx, pose, this.projector, { tone: 'tracking', tint: PLAYER_TINTS[i], glow: frame.render.glow });
     });
   }
 

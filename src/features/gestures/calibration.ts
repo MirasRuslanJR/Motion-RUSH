@@ -53,7 +53,8 @@ export interface CalibrationProgress {
   done: boolean;
 }
 
-type CalibrationConfig = typeof GESTURE_CONFIG.calibration;
+/** Same keys as GESTURE_CONFIG.calibration, any values (two-player mode uses a quicker capture). */
+type CalibrationConfig = { readonly [K in keyof typeof GESTURE_CONFIG.calibration]: number };
 
 export function computeBaseline(samples: readonly BodyGeometry[], cfg: CalibrationConfig = GESTURE_CONFIG.calibration): Baseline {
   const scale = median(samples.map((s) => s.shoulderWidth));

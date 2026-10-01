@@ -1,19 +1,29 @@
-import { Calibrator, type Baseline, type CalibrationProgress } from '../gestures/calibration';
+import { GESTURE_CONFIG } from '../../config/gesture.config';
+import { adaptBaselineDrift, Calibrator, type Baseline, type CalibrationProgress } from '../gestures/calibration';
+import { diagnose, HintScheduler, type Diagnosis } from '../gestures/ErrorDiagnosisEngine';
 import { extractFeatures, extractGeometry, type BodyFeatures } from '../gestures/FeatureExtractor';
 import { classify } from '../gestures/GestureClassifier';
 import { GestureStateMachine } from '../gestures/GestureStateMachine';
+import type { ExpectedMotion } from '../gestures/types';
+import type { DiagnosisInput, PlayerInput } from '../gameplay/GameEngine';
 import type { Lane } from '../gameplay/types';
-import type { PlayerInput } from '../gameplay/GameEngine';
 import { copyPoseInto, createPose, LM, lm, type Pose } from '../tracking/landmarks';
 import { MotionSmoother } from '../tracking/MotionSmoother';
 
 /** Pose loss shorter than this keeps the last pose (like the main engine). */
 const HOLD_MS = 320;
 
+/** Two people side by side rarely stand perfectly still: a shorter, more tolerant capture. */
+const QUICK_CALIBRATION = { ...GESTURE_CONFIG.calibration, durationMs: 1400, maxDriftSW: 0.24 };
+
+function toInput(d: Diagnosis | null): DiagnosisInput | null {
+  return d ? { expected: d.expected, verdict: d.verdict, ruleId: d.ruleId, message: d.message } : null;
+}
+
 /**
  * One player's own recognition pipeline for local two-player games:
- * smoothing → quick calibration → features → classifier → state machines.
- * The play area (lanes) is this player's half of the picture.
+ * smoothing → quick calibration → features → classifier → state machines →
+ * error-mode diagnosis. The play area (lanes) is this player's half of the picture.
  */
 export class PlayerTracker {
   readonly region: { x0: number; x1: number };
@@ -21,12 +31,19 @@ export class PlayerTracker {
   pose: Pose | null = null;
   features: BodyFeatures | null = null;
   calibration: CalibrationProgress = { progress: 0, issue: 'NOT_TRACKED', done: false };
+  /** Error-mode diagnosis for the motion this player's game expects right now. */
+  diagnosis: Diagnosis | null = null;
+  /** Set when a jump starts — the caller reads and clears it (e.g. "jump for a rematch"). */
+  jumped = false;
+  private expected: ExpectedMotion | null = null;
+  private readonly hints = new HintScheduler();
   private readonly smoother = new MotionSmoother();
-  private readonly calibrator = new Calibrator();
+  private readonly calibrator = new Calibrator(QUICK_CALIBRATION);
   private readonly lateral = new GestureStateMachine('lateral');
   private readonly vertical = new GestureStateMachine('vertical');
   private readonly buffer = createPose();
   private lastSeen = Number.NEGATIVE_INFINITY;
+  private lastUpdate = 0;
 
   constructor(region: { x0: number; x1: number }) {
     this.region = region;
@@ -36,8 +53,22 @@ export class PlayerTracker {
     return this.pose !== null;
   }
 
-  /** Feed one inference result for this player (null = not in the picture). */
+  /** The throttled hint actually shown to the player. */
+  get hint(): Diagnosis | null {
+    return this.hints.current;
+  }
+
+  setExpected(expected: ExpectedMotion | null): void {
+    if (expected === this.expected) return;
+    this.expected = expected;
+    this.diagnosis = null;
+    this.hints.reset();
+  }
+
+  /** Feed one inference result for this player (null = not in their half of the picture). */
   update(raw: Pose | null, now: number): void {
+    const dt = this.lastUpdate ? now - this.lastUpdate : 33;
+    this.lastUpdate = now;
     if (raw && Math.min(lm(raw, LM.LEFT_SHOULDER).v, lm(raw, LM.RIGHT_SHOULDER).v) >= 0.5) {
       this.lastSeen = now;
       this.pose = copyPoseInto(this.smoother.smooth(raw, now), this.buffer);
@@ -53,15 +84,21 @@ export class PlayerTracker {
     }
     if (!pose) {
       this.features = null;
+      this.diagnosis = null;
       this.lateral.reset(now);
       this.vertical.reset(now);
+      this.hints.update(null, now);
       return;
     }
-    this.features = extractFeatures(pose, this.baseline);
-    const c = classify(this.features, this.baseline.mode);
-    const feats = { leanX: this.features.leanX, crouchDepth: this.features.crouchDepth, leftHandLift: this.features.leftHandLift, rightHandLift: this.features.rightHandLift };
-    this.lateral.update(c, feats, now);
-    this.vertical.update(c, feats, now);
+    const features = extractFeatures(pose, this.baseline);
+    this.features = features;
+    const c = classify(features, this.baseline.mode);
+    const feats = { leanX: features.leanX, crouchDepth: features.crouchDepth, leftHandLift: features.leftHandLift, rightHandLift: features.rightHandLift };
+    const events = [...this.lateral.update(c, feats, now), ...this.vertical.update(c, feats, now)];
+    if (events.some((e) => e.type === 'JUMP' && e.phase === 'start')) this.jumped = true;
+    if (this.lateral.current.phase === 'NEUTRAL' && this.vertical.current.phase === 'NEUTRAL') adaptBaselineDrift(this.baseline, features, dt);
+    this.diagnosis = this.expected ? diagnose(this.expected, features, c, this.baseline, now) : null;
+    this.hints.update(this.diagnosis, now);
   }
 
   input(): PlayerInput {
@@ -73,21 +110,22 @@ export class PlayerTracker {
       lane,
       jumpHeld: vertical === 'JUMP',
       crouchHeld: vertical === 'CROUCH',
-      diagnosis: null,
-      hint: null,
+      diagnosis: toInput(this.diagnosis),
+      hint: toInput(this.hints.current),
     };
   }
-}
 
-/** Splits the detected people between the left (P1) and right (P2) half of the picture. */
-export function splitPlayers(people: readonly Pose[], aspect: number): [Pose | null, Pose | null] {
-  const slots: [Pose | null, Pose | null] = [null, null];
-  const mid = aspect / 2;
-  for (const p of people) {
-    const x = (lm(p, LM.LEFT_SHOULDER).x + lm(p, LM.RIGHT_SHOULDER).x) / 2;
-    const side = x < mid ? 0 : 1;
-    if (!slots[side]) slots[side] = p;
-    else if (!slots[1 - side]) slots[1 - side] = p;
+  /** One short line for the setup screen. */
+  get setupStatus(): string {
+    if (this.baseline) return 'Готов!';
+    if (!this.pose) return 'Не вижу — встань в свою половину';
+    switch (this.calibration.issue) {
+      case 'ARMS_UP':
+        return 'Опусти руки';
+      case 'MOVING':
+        return 'Замри на секунду';
+      default:
+        return 'Стой ровно…';
+    }
   }
-  return slots;
 }

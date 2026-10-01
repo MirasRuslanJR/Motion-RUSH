@@ -23,6 +23,8 @@ export interface SkeletonDrawOptions {
   alpha?: number;
   /** Soft wide glow pass under the bones (skipped on low render quality). */
   glow?: boolean;
+  /** One colour for all bones and the head (e.g. the player colour in two-player mode). */
+  tint?: string;
 }
 
 const NONE: ReadonlySet<number> = new Set();
@@ -76,7 +78,7 @@ export function drawSkeleton(ctx: CanvasRenderingContext2D, pose: Pose, p: Proje
       if (vis < 0.25) continue;
       const lit = highlight.has(ia) && highlight.has(ib);
       const err = errors.has(ia) && errors.has(ib);
-      ctx.strokeStyle = err ? PALETTE.error : lit && opts.tone !== 'success' ? PALETTE.cyan : boneColor(ia, ib, opts.tone);
+      ctx.strokeStyle = err ? PALETTE.error : lit && opts.tone !== 'success' ? PALETTE.cyan : (opts.tint ?? boneColor(ia, ib, opts.tone));
       const visAlpha = vis < 0.5 ? 0.3 : 1;
       if (pass === 0) {
         ctx.globalAlpha = 0.16 * alpha * visAlpha * (lit || err ? 1.8 : 1);
@@ -100,7 +102,7 @@ export function drawSkeleton(ctx: CanvasRenderingContext2D, pose: Pose, p: Proje
     const re = lm(pose, LM.RIGHT_EYE);
     const hx = (nose.x + (le.x + re.x) / 2) / 2;
     const hy = (nose.y + (le.y + re.y) / 2) / 2;
-    ctx.strokeStyle = errors.has(LM.NOSE) ? PALETTE.error : opts.tone === 'success' ? PALETTE.success : PALETTE.white;
+    ctx.strokeStyle = errors.has(LM.NOSE) ? PALETTE.error : opts.tone === 'success' ? PALETTE.success : (opts.tint ?? PALETTE.white);
     ctx.globalAlpha = (ghost ? 0.5 : 0.85) * alpha;
     ctx.lineWidth = width;
     ctx.beginPath();

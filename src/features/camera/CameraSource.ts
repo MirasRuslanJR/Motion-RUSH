@@ -104,6 +104,24 @@ export class CameraSource {
     if (this.stream && this.video.paused) void this.video.play().catch(() => undefined);
   }
 
+  /**
+   * A screen without a camera view must not stop tracking: browsers PAUSE a
+   * video that is removed from the page. So the element is moved (not removed)
+   * into a tiny invisible holder that stays in the document.
+   */
+  park(): void {
+    let lot = document.getElementById('camera-parking');
+    if (!lot) {
+      lot = document.createElement('div');
+      lot.id = 'camera-parking';
+      lot.setAttribute('aria-hidden', 'true');
+      lot.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;overflow:hidden;opacity:0.01;pointer-events:none;z-index:-1';
+      document.body.appendChild(lot);
+    }
+    lot.appendChild(this.video);
+    this.ensurePlaying();
+  }
+
   stop(): void {
     this.endedHandler = null;
     if (this.stream) {

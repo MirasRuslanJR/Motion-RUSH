@@ -49,7 +49,8 @@ export function CameraViewport({
     host.prepend(video);
     engine.ensureVideoPlaying();
     return () => {
-      if (video.parentElement === host) host.removeChild(video);
+      // Moved, not removed: a detached <video> is paused by the browser and tracking would freeze.
+      if (video.parentElement === host) engine.parkVideo();
     };
   }, [engine]);
 

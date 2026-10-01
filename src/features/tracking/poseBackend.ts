@@ -2,6 +2,7 @@ import { TRACKING_CONFIG } from '../../config/tracking.config';
 import { DEBUG } from '../../lib/env';
 import type { RawLandmark } from './LandmarkNormalizer';
 import { installMediapipeLogFilter, LandmarkerCore, type AssetSource, type Delegate } from './landmarkerCore';
+import type { TwoPlayerTracking } from './splitTracking';
 import { WorkerPoseBackend } from './WorkerPoseBackend';
 
 export interface PoseResult {
@@ -9,6 +10,9 @@ export interface PoseResult {
   /** Time the frame was captured (engine clock, ms). */
   capturedAt: number;
   inferenceMs: number;
+  /** Two-player mode: player slot (0 = P1, 1 = P2) of each pose; absent = unknown. */
+  slots?: readonly number[];
+  split?: TwoPlayerTracking;
 }
 
 export interface PoseCallbacks {
@@ -26,8 +30,8 @@ export interface PoseBackend {
   /** A frame is in flight — do not submit another one. */
   readonly busy: boolean;
   submit(video: HTMLVideoElement, capturedAt: number, callbacks: PoseCallbacks): void;
-  /** 1 = one player (fast tracking), 2 = two players in one frame. */
-  setNumPoses(numPoses: number): void;
+  /** Two players: a separate tracker for each half of the picture. */
+  setSplit(enabled: boolean): void;
 }
 
 export function assetSources(): AssetSource[] {
@@ -43,6 +47,7 @@ class MainThreadBackend implements PoseBackend {
   readonly kind = 'main' as const;
   readonly busy = false;
   private readonly core: LandmarkerCore;
+  private split = false;
 
   constructor(core: LandmarkerCore) {
     this.core = core;
@@ -52,8 +57,10 @@ class MainThreadBackend implements PoseBackend {
     return this.core.delegate;
   }
 
-  setNumPoses(numPoses: number): void {
-    void this.core.setNumPoses(numPoses);
+  /** No second tracker on the main thread: one tracker looks for two people. */
+  setSplit(enabled: boolean): void {
+    this.split = enabled;
+    void this.core.setNumPoses(enabled ? 2 : 1);
   }
 
   submit(video: HTMLVideoElement, capturedAt: number, callbacks: PoseCallbacks): void {
@@ -66,7 +73,7 @@ class MainThreadBackend implements PoseBackend {
       return;
     }
     // null = no answer for this frame (delegate switch) — keep the previous state.
-    if (poses) callbacks.onResult({ poses, capturedAt, inferenceMs: performance.now() - started });
+    if (poses) callbacks.onResult({ poses, capturedAt, inferenceMs: performance.now() - started, split: this.split ? 'shared' : 'off' });
   }
 }
 

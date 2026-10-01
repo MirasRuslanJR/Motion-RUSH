@@ -23,6 +23,8 @@ interface Pending {
 class WorkerChannel {
   readonly worker: Worker;
   delegate: Delegate;
+  /** Counters for ?debug=1 diagnostics. */
+  readonly counters = { sent: 0, results: 0, skipped: 0, timeouts: 0, fatal: 0, workerErrors: 0, grabFailures: 0 };
   private pending: Pending | null = null;
   private useVideoFrame = typeof VideoFrame !== 'undefined';
   private grabFailures = 0;
@@ -78,7 +80,11 @@ class WorkerChannel {
 
   send(video: HTMLVideoElement, capturedAt: number, onResult: Pending['onResult'], onError: Pending['onError']): void {
     if (this.pending || this.dead) return;
-    const timer = window.setTimeout(() => this.clear(), TRACKING_CONFIG.worker.resultTimeoutMs);
+    const timer = window.setTimeout(() => {
+      this.counters.timeouts++;
+      this.clear();
+    }, TRACKING_CONFIG.worker.resultTimeoutMs);
+    this.counters.sent++;
     this.pending = { capturedAt, timer, onResult, onError };
     this.grab(video, capturedAt).then(
       (frame) => {
@@ -98,14 +104,15 @@ class WorkerChannel {
       },
       () => {
         // No decodable frame right now (e.g. video just resized) — skip this tick.
+        this.counters.grabFailures++;
         if (++this.grabFailures >= 3) this.useVideoFrame = false;
         this.clear();
       },
     );
   }
 
-  setNumPoses(numPoses: number): void {
-    if (!this.dead) this.worker.postMessage({ type: 'options', numPoses } satisfies WorkerRequest);
+  setSplit(enabled: boolean): void {
+    if (!this.dead) this.worker.postMessage({ type: 'split', enabled } satisfies WorkerRequest);
   }
 
   terminate(): void {
@@ -135,17 +142,21 @@ class WorkerChannel {
   private readonly onMessage = (event: MessageEvent<WorkerResponse>): void => {
     const message = event.data;
     if (message.type === 'result') {
+      this.counters.results++;
+      if (message.skipped) this.counters.skipped++;
       this.delegate = message.delegate;
       if (message.inputRejected) this.useVideoFrame = false;
       // Ignore late answers for a frame that already timed out.
       if (!this.pending || this.pending.capturedAt !== message.timestamp) return;
       this.clear()?.onResult(message);
     } else if (message.type === 'fatal') {
+      this.counters.fatal++;
       this.clear()?.onError(new Error(message.message));
     }
   };
 
   private readonly onWorkerError = (event: ErrorEvent): void => {
+    this.counters.workerErrors++;
     this.dead = true;
     this.clear()?.onError(new Error(event.message || 'Pose worker crashed'));
     this.onDead?.();
@@ -176,7 +187,10 @@ export class WorkerPoseBackend implements PoseBackend {
 
   static async create(sources: AssetSource[], filterLogs: boolean, overrides: BackendOverrides): Promise<WorkerPoseBackend> {
     const delegate = overrides.delegate ?? TRACKING_CONFIG.worker.delegate;
-    return new WorkerPoseBackend(await WorkerChannel.create(sources, filterLogs, delegate, overrides.frame));
+    const backend = new WorkerPoseBackend(await WorkerChannel.create(sources, filterLogs, delegate, overrides.frame));
+    // Debug builds of the page (?debug=1) can read the counters from the console.
+    if (!filterLogs) (window as unknown as { __poseChannel?: unknown }).__poseChannel = backend.channel.counters;
+    return backend;
   }
 
   get delegate(): Delegate {
@@ -187,8 +201,8 @@ export class WorkerPoseBackend implements PoseBackend {
     return this.channel.busy;
   }
 
-  setNumPoses(numPoses: number): void {
-    this.channel.setNumPoses(numPoses);
+  setSplit(enabled: boolean): void {
+    this.channel.setSplit(enabled);
   }
 
   submit(video: HTMLVideoElement, capturedAt: number, callbacks: PoseCallbacks): void {
@@ -202,6 +216,8 @@ export class WorkerPoseBackend implements PoseBackend {
           poses: unpackPoses(message.data, message.count, this.pool),
           capturedAt: message.timestamp,
           inferenceMs: message.inferenceMs,
+          slots: message.slots,
+          split: message.split,
         });
       },
       (error) => callbacks.onError(error),

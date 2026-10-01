@@ -91,12 +91,41 @@
 }
 
 .dance__hint {
-  padding: 10px 16px;
+  padding: 12px 20px;
   border-radius: var(--radius-m);
   border: 1px solid color-mix(in srgb, var(--pc) 60%, transparent);
-  background: rgba(8, 10, 18, 0.9);
+  background: rgba(12, 13, 22, 0.92);
+  font-weight: 800;
+  /* Readable from 2–3 m. */
+  font-size: clamp(18px, 2vw, 26px);
+}
+
+.dance__who {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.dance__who-chip {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--pc) 35%, transparent);
+  font-weight: 800;
+  font-size: 17px;
+  color: var(--text-2);
+}
+
+.dance__who-chip.is-on {
+  border-color: var(--pc);
+  color: var(--text);
+  background: color-mix(in srgb, var(--pc) 14%, transparent);
+}
+
+.dance__who-loading {
+  font-size: 17px;
   font-weight: 700;
-  font-size: 16px;
+  color: var(--text-2);
 }
 
 .dance__hint.is-ok {
@@ -179,15 +208,6 @@
   position: relative;
 }
 
-.dance__cam-wrap.is-split::after {
-  content: '';
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 50%;
-  border-left: 2px dashed rgba(255, 255, 255, 0.45);
-  pointer-events: none;
-}
 
 .dance__cam-label {
   position: absolute;
