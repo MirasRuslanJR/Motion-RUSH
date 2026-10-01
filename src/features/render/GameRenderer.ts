@@ -1,7 +1,9 @@
+import { GAME_CONFIG } from '../../config/game.config';
 import { clamp, lerp, midpoint, type Point } from '../../lib/math/geometry';
 import type { MotionFrame } from '../engine/MotionEngine';
 import type { GameEngine, GameEvent } from '../gameplay/GameEngine';
-import { isPickup, type CourseItem } from '../gameplay/types';
+import { isPickup, OBSTACLE_REQUIREMENT, type CourseItem } from '../gameplay/types';
+import { motionMeta } from '../gestures/types';
 import { createPose, LM, lm, type Pose } from '../tracking/landmarks';
 import { buildSyntheticPose } from '../tracking/syntheticPose';
 import { observeCanvas, type CanvasSize } from './canvas';
@@ -47,7 +49,8 @@ function layout(w: number, h: number): Geometry {
   const laneW = Math.min(w * 0.24, h * 0.34);
   // Portrait (phones): lift the runner above the HUD hint that sits at the bottom.
   const portrait = h > w * 0.9;
-  return { w, h, horizonY: h * (portrait ? 0.24 : 0.3), groundY: h * (portrait ? 0.66 : 0.9), vx: w / 2, laneW };
+  // Landscape: the runner stands above the hint card at the bottom of the scene.
+  return { w, h, horizonY: h * (portrait ? 0.24 : 0.27), groundY: h * (portrait ? 0.66 : 0.79), vx: w / 2, laneW };
 }
 
 const FLOATER_MS = 900;
@@ -103,6 +106,11 @@ export class GameRenderer {
   private ghostLane = 0;
   private ghostJump = 0;
   private ghostDuck = 0;
+  private wasAirborne = false;
+  private landedAt = Number.NEGATIVE_INFINITY;
+  /** Action word drawn above the next obstacle (cached per obstacle). */
+  private labelFor = -1;
+  private label = '';
 
   constructor(canvas: HTMLCanvasElement, background: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d');
@@ -183,12 +191,12 @@ export class GameRenderer {
         const y = this.groundY(g, 0) - g.laneW * 0.5;
         const color = event.kind === 'SHIELD' ? PALETTE.success : PALETTE.warn;
         this.particles.burst(x, y, color, 26, g.laneW * 2);
-        this.floaters.push({ text: event.kind === 'SHIELD' ? 'SHIELD' : '×2', sub: event.kind === 'SHIELD' ? 'защита от промаха' : 'BOOST', x, y: y - g.laneW * 0.3, born: now, color });
+        this.floaters.push({ text: event.kind === 'SHIELD' ? 'ЩИТ' : '×2', sub: event.kind === 'SHIELD' ? 'защита от промаха' : 'очки на 8 секунд', x, y: y - g.laneW * 0.3, born: now, color });
         break;
       }
       case 'shield-used':
         this.particles.burst(chest.x, chest.y, PALETTE.success, 24, g.laneW * 2.2);
-        this.floaters.push({ text: 'SHIELD', sub: 'энергия сохранена', x: chest.x, y: chest.y - g.laneW * 1.3, born: now, color: PALETTE.success });
+        this.floaters.push({ text: 'ЩИТ', sub: 'жизнь сохранена', x: chest.x, y: chest.y - g.laneW * 0.9, born: now, color: PALETTE.success });
         break;
       case 'combo':
         this.comboRingAt = now;
@@ -215,7 +223,15 @@ export class GameRenderer {
     // Cosmetic smoothing (frame-rate independent).
     const k = (tau: number) => 1 - Math.exp(-dtMs / tau);
     this.laneVisual = lerp(this.laneVisual, game.lane, k(75));
-    this.jumpVisual = lerp(this.jumpVisual, game.airborne ? 1 : 0, k(game.airborne ? 70 : 130));
+    // A real arc over the jump's fixed airtime — up, hang, down — then a landing puff.
+    const airT = (game.time - game.jumpStartedAt) / GAME_CONFIG.airtimeMs;
+    const inAir = airT >= 0 && airT < 1;
+    this.jumpVisual = inAir ? Math.sin(Math.PI * airT) : lerp(this.jumpVisual, 0, k(50));
+    if (this.wasAirborne && !inAir) {
+      this.landedAt = now;
+      this.particles.burst(this.laneX(g, this.laneVisual, 0), this.groundY(g, 0), PALETTE.white, 10, g.laneW * 0.9, Math.PI * 0.9, -Math.PI / 2);
+    }
+    this.wasAirborne = inAir;
     this.duckVisual = lerp(this.duckVisual, game.ducking ? 1 : 0, k(60));
     const opp = this.opponent;
     if (opp) {
@@ -236,16 +252,22 @@ export class GameRenderer {
       ctx.translate(Math.sin(now * 0.09) * a, Math.cos(now * 0.11) * a * 0.6);
     }
     this.drawTrack(ctx, g);
+    this.drawLaneGuides(ctx, g, game, now);
 
     // The course is sorted by arrival, so walking it backwards goes far → near:
     // correct painter's order with no per-frame arrays or sorting.
     const course = game.course;
-    const nextId = game.nextRequired?.id ?? -1;
+    const next = game.nextRequired;
+    const nextId = next?.id ?? -1;
+    if (next && next.id !== this.labelFor) {
+      this.labelFor = next.id;
+      this.label = isPickup(next.kind) ? '' : motionMeta(OBSTACLE_REQUIREMENT[next.kind], game.rules.scheme).title.toUpperCase();
+    }
     for (let i = course.length - 1; i >= 0; i--) {
       const item = course[i];
       if (!item || !this.itemVisible(item)) continue;
       const z = this.itemZ(item, game.time);
-      if (z > 0 && z <= Z_FAR) this.drawItem(ctx, g, item, z, now, item.id === nextId);
+      if (z > 0 && z <= Z_FAR) this.drawItem(ctx, g, item, z, now, item.id === nextId, item.id === nextId ? this.label : '');
     }
     if (opp) this.drawGhost(ctx, g, opp, game.time);
     this.drawRunner(ctx, g, game, frame, now, quality.trailLength);
@@ -253,7 +275,7 @@ export class GameRenderer {
       const item = course[i];
       if (!item || !this.itemVisible(item)) continue;
       const z = this.itemZ(item, game.time);
-      if (z <= 0 && z > -0.9) this.drawItem(ctx, g, item, z, now, false);
+      if (z <= 0 && z > -0.9) this.drawItem(ctx, g, item, z, now, false, '');
     }
 
     this.particles.draw(ctx);
@@ -355,7 +377,37 @@ export class GameRenderer {
     ctx.restore();
   }
 
-  private drawItem(ctx: CanvasRenderingContext2D, g: Geometry, item: CourseItem, z: number, now: number, isNext: boolean): void {
+  /**
+   * Floor guides: a soft strip under the runner (where you are) and, for the
+   * coming gate, its open lane pulsing (where to go) — green once you are there.
+   */
+  private drawLaneGuides(ctx: CanvasRenderingContext2D, g: Geometry, game: GameEngine, now: number): void {
+    const strip = (lane: number, z0: number, z1: number, color: string, alpha: number) => {
+      ctx.beginPath();
+      ctx.moveTo(this.laneX(g, lane - 0.5, z0), this.groundY(g, z0));
+      ctx.lineTo(this.laneX(g, lane + 0.5, z0), this.groundY(g, z0));
+      ctx.lineTo(this.laneX(g, lane + 0.5, z1), this.groundY(g, z1));
+      ctx.lineTo(this.laneX(g, lane - 0.5, z1), this.groundY(g, z1));
+      ctx.closePath();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      ctx.fill();
+    };
+    ctx.save();
+    strip(this.laneVisual, -0.6, 2.4, PALETTE.cyan, 0.09);
+    const active = game.activeItem;
+    if (active && game.phase === 'running' && (active.kind === 'GATE_LEFT' || active.kind === 'GATE_RIGHT' || active.kind === 'GATE_CENTER')) {
+      const z = this.itemZ(active, game.time);
+      if (z > 0) {
+        const there = game.lane === active.lane;
+        const pulse = 0.08 + 0.1 * (0.5 + 0.5 * Math.sin(now / 130));
+        strip(active.lane, -0.6, Math.min(z, Z_FAR), there ? PALETTE.success : PALETTE.warn, there ? 0.16 : pulse);
+      }
+    }
+    ctx.restore();
+  }
+
+  private drawItem(ctx: CanvasRenderingContext2D, g: Geometry, item: CourseItem, z: number, now: number, isNext: boolean, label: string): void {
     const s = project(z);
     const unit = g.laneW * s;
     const fx = this.itemFx.get(item.id);
@@ -494,6 +546,21 @@ export class GameRenderer {
         break;
       }
     }
+    // The action word above the next obstacle — readable from a few metres away.
+    if (label && !fx && z < Z_FAR * 0.8) {
+      const size = clamp(unit * 0.2, 13, 34);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = alpha * clamp((Z_FAR * 0.8 - z) / 2, 0, 1);
+      ctx.font = `800 ${Math.round(size)}px Unbounded, system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = Math.max(3, size * 0.22);
+      ctx.strokeStyle = rgba(PALETTE.bg, 0.85);
+      const ly = baseY - unit * 1.62;
+      ctx.strokeText(label, this.laneX(g, 0, z), ly);
+      ctx.fillStyle = PALETTE.white;
+      ctx.fillText(label, this.laneX(g, 0, z), ly);
+    }
     ctx.restore();
   }
 
@@ -618,7 +685,9 @@ export class GameRenderer {
     const groundY = this.groundY(g, 0);
     const jump = this.jumpVisual * g.laneW * 0.62;
     const legLen = lerp(LEG_STAND, LEG_DUCK, this.duckVisual);
-    const hip: Point = { x: this.laneX(g, this.laneVisual, 0), y: groundY - legLen * px - jump };
+    // A short squash on landing sells the weight of the jump.
+    const squash = clamp(1 - (now - this.landedAt) / 180, 0, 1);
+    const hip: Point = { x: this.laneX(g, this.laneVisual, 0), y: groundY - legLen * px - jump + squash * px * 0.3 };
 
     // Upper body source: live (display-smoothed) pose relative to a hip reference, else a synthetic figure.
     const pose = frame.displayPose;
@@ -704,13 +773,22 @@ export class GameRenderer {
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    const w = Math.max(2, px * 0.16);
+    const w = Math.max(3, px * 0.2);
     for (const [hj, kn, ft] of legs) {
       bone(hj, kn, PALETTE.violet, w);
       bone(kn, ft, PALETTE.violet, w);
     }
     const lh: Point = { x: hip.x - 0.34 * px, y: hip.y };
     const rh: Point = { x: hip.x + 0.34 * px, y: hip.y };
+    // Filled torso: reads as a body, not a wireframe.
+    ctx.fillStyle = rgba(bodyColor, 0.18);
+    ctx.beginPath();
+    ctx.moveTo(ls.x, ls.y);
+    ctx.lineTo(rs.x, rs.y);
+    ctx.lineTo(rh.x, rh.y);
+    ctx.lineTo(lh.x, lh.y);
+    ctx.closePath();
+    ctx.fill();
     bone(lh, rh, PALETTE.white, w);
     bone(ls, lh, PALETTE.white, w);
     bone(rs, rh, PALETTE.white, w);
@@ -719,10 +797,12 @@ export class GameRenderer {
     bone(le, lw, bodyColor, w);
     bone(rs, re, bodyColor, w);
     bone(re, rw, bodyColor, w);
-    ctx.strokeStyle = rgba(PALETTE.white, 0.95);
-    ctx.lineWidth = w;
     ctx.beginPath();
     ctx.arc(nose.x, nose.y - px * 0.1, px * 0.34, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(bodyColor, 0.22);
+    ctx.fill();
+    ctx.strokeStyle = rgba(PALETTE.white, 0.95);
+    ctx.lineWidth = w;
     ctx.stroke();
     ctx.fillStyle = rgba(bodyColor, 1);
     for (const p of [lw, rw]) {

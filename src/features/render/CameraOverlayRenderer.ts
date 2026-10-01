@@ -1,4 +1,6 @@
+import { GESTURE_CONFIG } from '../../config/gesture.config';
 import { midpoint, type Point } from '../../lib/math/geometry';
+import { xOfZone } from '../gestures/calibration';
 import type { MotionFrame } from '../engine/MotionEngine';
 import { isErrorVerdict } from '../gestures/ErrorDiagnosisEngine';
 import { targetGuides } from '../gestures/targetPose';
@@ -107,6 +109,7 @@ export class CameraOverlayRenderer {
     this.mapping = coverMapping(width, height, frame.videoWidth, frame.videoHeight);
     const success = diagnosis?.verdict === 'correct';
     this.updateJointSets(frame, opts.guidance);
+    if (opts.guidance) this.drawLaneZones(ctx, frame, width, height);
 
     if (opts.trail) {
       this.trail.push(pose, this.projector);
@@ -128,6 +131,53 @@ export class CameraOverlayRenderer {
       pulse: (now % 900) / 900,
       glow: frame.render.glow,
     });
+  }
+
+  /**
+   * Standing play: lanes are parts of the picture. Shows the three zones and
+   * lights the one the player is in, so moving between lanes is obvious.
+   */
+  private drawLaneZones(ctx: CanvasRenderingContext2D, frame: Readonly<MotionFrame>, width: number, height: number): void {
+    const baseline = frame.baseline;
+    const region = baseline?.region;
+    if (!baseline || baseline.mode !== 'full' || !region) return;
+    const border = GESTURE_CONFIG.body.step.activation;
+    const xl = this.projector.x(xOfZone(-border, region));
+    const xr = this.projector.x(xOfZone(border, region));
+    const lateral = frame.lateral.phase === 'CONFIRMED' ? frame.lateral.gesture : null;
+    const active = lateral === 'LEAN_LEFT' ? 0 : lateral === 'LEAN_RIGHT' ? 2 : 1;
+    const zones: [number, number, string][] = [
+      [0, xl, 'ЛЕВО'],
+      [xl, xr, 'ЦЕНТР'],
+      [xr, width, 'ПРАВО'],
+    ];
+    ctx.save();
+    zones.forEach(([x0, x1, name], i) => {
+      const a = Math.max(0, Math.min(x0, x1));
+      const b = Math.min(width, Math.max(x0, x1));
+      if (i === active) {
+        ctx.globalAlpha = 0.1;
+        ctx.fillStyle = PALETTE.cyan;
+        ctx.fillRect(a, 0, b - a, height);
+      }
+      ctx.globalAlpha = i === active ? 0.95 : 0.45;
+      ctx.fillStyle = i === active ? PALETTE.cyan : PALETTE.white;
+      ctx.font = '700 12px Manrope, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      // Upper part of the picture: clear of the corner tags and the gesture badges.
+      ctx.fillText(name, (a + b) / 2, Math.max(48, height * 0.2));
+    });
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = PALETTE.white;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 8]);
+    for (const x of [xl, xr]) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /**

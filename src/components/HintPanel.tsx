@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useRef } from 'react';
 import type { MotionEngine } from '../features/engine/MotionEngine';
 import type { Verdict } from '../features/gestures/diagnosisRules';
+import type { Arrow } from '../features/gestures/types';
 import { useEngineFrame, useMotionUi } from '../hooks/useEngine';
 import { Icon } from './Icon';
 import './HintPanel.css';
@@ -17,13 +18,15 @@ const VERDICT_LABEL: Record<Verdict, string> = {
 interface HintPanelProps {
   engine: MotionEngine;
   variant?: 'full' | 'compact';
+  /** In-game: the move the coming obstacle needs, shown big on top of the hint. */
+  headline?: { title: string; arrow: Arrow | null } | null;
 }
 
 /**
  * Error mode made visible: what is wrong, which body part, which direction,
  * and a live meter of how far the player is from the target.
  */
-export function HintPanel({ engine, variant = 'full' }: HintPanelProps) {
+export function HintPanel({ engine, variant = 'full', headline = null }: HintPanelProps) {
   const hint = useMotionUi(engine, (s) => s.hint);
   const fillRef = useRef<HTMLDivElement>(null);
   const valueRef = useRef<HTMLSpanElement>(null);
@@ -39,7 +42,14 @@ export function HintPanel({ engine, variant = 'full' }: HintPanelProps) {
   });
 
   return (
-    <div className={`hint hint--${variant}`} data-verdict={hint?.verdict ?? 'none'}>
+    <div className={`hint hint--${variant}`} data-verdict={hint?.verdict ?? 'none'} data-headline={headline ? 'yes' : undefined}>
+      {headline && (
+        <div className="hint__headline">
+          {headline.arrow && <Icon name={headline.arrow} size={30} className="hint__arrow" />}
+          <strong className="hint__title">{headline.title}</strong>
+          {hint && <span className="hint__label">{VERDICT_LABEL[hint.verdict]}</span>}
+        </div>
+      )}
       <AnimatePresence mode="popLayout" initial={false}>
         {hint && (
           <motion.div
@@ -50,9 +60,9 @@ export function HintPanel({ engine, variant = 'full' }: HintPanelProps) {
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.18 }}
           >
-            <span className="hint__label">{VERDICT_LABEL[hint.verdict]}</span>
+            {!headline && <span className="hint__label">{VERDICT_LABEL[hint.verdict]}</span>}
             <p className="hint__message" role="status" aria-live="polite">
-              {hint.arrow && <Icon name={hint.arrow} size={variant === 'compact' ? 18 : 22} className="hint__arrow" />}
+              {hint.arrow && !headline && <Icon name={hint.arrow} size={variant === 'compact' ? 18 : 22} className="hint__arrow" />}
               {hint.message}
             </p>
           </motion.div>

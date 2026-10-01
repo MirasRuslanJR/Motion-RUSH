@@ -14,6 +14,7 @@ import { computeSessionStats } from '../../features/results/sessionStats';
 import type { TwoPlayerTracking } from '../../features/tracking/splitTracking';
 import { PlayerTracker } from '../../features/versus/PlayerTracker';
 import { useEngineFrame } from '../../hooks/useEngine';
+import { RunnerMusic } from '../../lib/audio/runnerMusic';
 import { sfx } from '../../lib/audio/sfx';
 import { DEBUG } from '../../lib/env';
 import './VersusScreen.css';
@@ -106,6 +107,8 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
   const finishedAt = useRef(0);
   const rematched = useRef(false);
   const [hud, setHud] = useState<Hud>({ sides: [], countdown: null, tracking: 'loading' });
+  const [music] = useState(() => new RunnerMusic());
+  useEffect(() => () => music.stop(), [music]);
   const hudKey = useRef('');
 
   useEffect(() => {
@@ -152,7 +155,10 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
           renderer?.handleEvent(event, now);
           sound(event, i === 0);
           if (event.type === 'miss') misses.current[i] = { message: event.reason.message, at: now };
-          if (event.type === 'countdown' && event.value === 0 && i === 0) goAt.current = now;
+          if (event.type === 'countdown' && event.value === 0 && i === 0) {
+            goAt.current = now;
+            music.start();
+          }
         }
       }
       if (renderer) {
@@ -183,7 +189,12 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
     const countdown: Hud['countdown'] =
       playing && lead.phase === 'countdown' ? lead.countdownValue : goAt.current !== null && now - goAt.current < GO_MS ? 'go' : null;
 
+    if (music.playing) {
+      const stage = Math.floor(lead.time / 18000);
+      music.update(Math.min(3, stage));
+    }
     if (stageRef.current === 'play' && games.every((g) => g.phase === 'ended')) {
+      music.stop();
       stageRef.current = 'done';
       finishedAt.current = now;
       setStage('done');

@@ -16,6 +16,7 @@ import { computeSessionStats } from '../../features/results/sessionStats';
 import type { DuelRoom } from '../../features/online/DuelRoom';
 import { GameRenderer } from '../../features/render/GameRenderer';
 import { useEngineFrame, useMotionUi } from '../../hooks/useEngine';
+import { RunnerMusic } from '../../lib/audio/runnerMusic';
 import { sfx } from '../../lib/audio/sfx';
 import { clamp } from '../../lib/math/geometry';
 import { useStore } from '../../lib/store';
@@ -239,6 +240,10 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
 
   useEffect(() => () => engine.setExpected(null), [engine]);
 
+  // Background music: starts on «Старт!», quieter during a pause, stops at the finish.
+  const [music] = useState(() => new RunnerMusic());
+  useEffect(() => () => music.stop(), [music]);
+
   useEffect(() => {
     if (!missToast) return;
     const timer = window.setTimeout(() => setMissToast(null), MISS_TOAST_MS);
@@ -258,10 +263,15 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
     for (const event of events) {
       renderer?.handleEvent(event, frame.time);
       soundFor(event);
+      if (event.type === 'countdown' && event.value === 0) music.start();
+      else if (event.type === 'pause') music.duck(true);
+      else if (event.type === 'resume') music.duck(false);
+      else if (event.type === 'end') music.stop();
       if (event.type === 'end') outcomeRef.current = event.outcome;
       if (event.type === 'miss') setMissToast({ id: event.item.id, message: event.reason.message });
     }
     const next = snapshot(game, mode, outcomeRef.current);
+    music.update(Math.min(3, next.stage));
     if (duel) {
       const opp = duel.ui.get().opponent;
       renderer?.setOpponent(opp && !opp.finished ? { name: duel.opponentName, lane: opp.lane, airborne: opp.airborne, ducking: opp.ducking } : null);
@@ -331,8 +341,8 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
                 </div>
               )}
               <div className="hud__powers">
-                {hud.shield && <span className="hud__power hud__power--shield">SHIELD</span>}
-                {hud.boosted && <span className="hud__power hud__power--boost">BOOST ×2</span>}
+                {hud.shield && <span className="hud__power hud__power--shield">ЩИТ</span>}
+                {hud.boosted && <span className="hud__power hud__power--boost">ОЧКИ ×2</span>}
               </div>
             </div>
           </div>
@@ -372,15 +382,8 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
           </AnimatePresence>
 
           <div className="hud__bottom">
-            {nextMeta && playing && (
-              <div className="hud__cue" key={hud.nextId}>
-                <span className="t-label">Дальше</span>
-                {nextMeta.arrow && <Icon name={nextMeta.arrow} size={18} />}
-                <strong>{nextMeta.title}</strong>
-                <span className="hud__cue-text">{nextMeta.cue}</span>
-              </div>
-            )}
-            <HintPanel engine={engine} variant="compact" />
+            {/* One card: the coming move (big) + error-mode advice + progress meter. */}
+            <HintPanel engine={engine} variant="compact" headline={nextMeta && playing ? { title: nextMeta.title, arrow: nextMeta.arrow } : null} />
           </div>
         </div>
 
