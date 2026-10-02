@@ -350,8 +350,13 @@
   .setup {
     grid-template-columns: minmax(0, 1fr);
   }
+  /* The whole picture, in its own shape: a tall box cropped the sides, so a step
+     to the side took the player out of view although the camera still saw them. */
   .setup__viewport {
-    height: min(58vh, 520px);
+    height: auto;
+    min-height: 0;
+    aspect-ratio: var(--video-aspect, 4 / 3);
+    max-height: 62vh;
   }
   .tutorial__main {
     grid-template-rows: auto auto;

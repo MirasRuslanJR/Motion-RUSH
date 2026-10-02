@@ -8,6 +8,14 @@
   margin: 0 auto;
 }
 
+/* Desktop: the picker sits in the middle of the screen, not glued to the top. */
+@media (min-width: 801px) {
+  .modes {
+    min-height: calc(100dvh - var(--topbar-h));
+    align-content: center;
+  }
+}
+
 .modes__side {
   display: flex;
   flex-direction: column;
@@ -362,5 +370,12 @@
   }
   .modes__start {
     min-height: 0;
+  }
+}
+
+/* Desktop: the neighbours fade out gently, so a card cut by the edge reads as "there is more". */
+@media (min-width: 801px) {
+  .carousel__viewport {
+    mask-image: linear-gradient(90deg, transparent 0, rgba(0, 0, 0, 0.35) 8%, #000 26%, #000 74%, rgba(0, 0, 0, 0.35) 92%, transparent 100%);
   }
 }

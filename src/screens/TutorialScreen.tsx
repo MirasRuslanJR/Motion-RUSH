@@ -76,7 +76,16 @@ export function TutorialScreen({ engine, onDone }: TutorialScreenProps) {
     <main className="screen setup tutorial">
       <div className="tutorial__main">
         <CameraViewport engine={engine} variant="stage" guidance={!success} className="setup__viewport" />
-        <HintPanel engine={engine} />
+        <HintPanel
+          engine={engine}
+          idle={
+            success
+              ? step + 1 >= STEPS.length
+                ? 'Готово! Все движения освоены — переходим к выбору режима'
+                : 'Отлично! Следующее движение — через секунду'
+              : 'Сделай движение — если что-то не так, здесь появится подсказка'
+          }
+        />
       </div>
 
       <aside className="setup__panel tutorial__panel">

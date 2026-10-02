@@ -76,6 +76,21 @@
   gap: 6px;
 }
 
+/* Nothing to correct yet: a calm line instead of an empty 0% meter. */
+.hint--full[data-verdict='none'] {
+  align-content: center;
+}
+
+.hint--full[data-verdict='none'] .hint__meter {
+  display: none;
+}
+
+.hint__idle {
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
 .hint__meter[aria-hidden='true'] {
   opacity: 0.35;
 }

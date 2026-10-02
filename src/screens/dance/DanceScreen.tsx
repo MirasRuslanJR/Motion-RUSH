@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { CameraViewport } from '../../components/CameraViewport';
 import { HoldGesture } from '../../components/HoldGesture';
 import { Icon } from '../../components/Icon';
+import { PoseGlyph } from '../../components/PoseGlyph';
 import {
   armAngles,
   BEAT_MS,
@@ -73,6 +74,27 @@ function strongestAndWeakest(d: DancerState): { best: string | null; worst: stri
   };
 }
 
+/** The coming pose cards with small figures — so the dancer can get ready for the next one. */
+function NextPoses({ dance, currentId }: { dance: DanceEngine; currentId: number | null }) {
+  const start = currentId === null ? 0 : dance.moves.findIndex((m) => m.id === currentId);
+  const moves = start < 0 ? [] : dance.moves.slice(start, start + 3);
+  if (moves.length === 0) return null;
+  return (
+    <section className="dance__next" aria-label="Следующие позы">
+      <span className="t-label">Дальше</span>
+      <ol>
+        {moves.map((m, i) => (
+          <li key={m.id} className={i === 0 ? 'is-now' : undefined}>
+            <PoseGlyph pose={m.pose} size={40} />
+            <span className="dance__next-name">{m.pose.title}</span>
+            {i === 0 && <span className="dance__next-tag">сейчас</span>}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 interface Hud {
   visible: boolean[];
   /** Two players before the music: "готов ✓", "не вижу" or where to move. */
@@ -85,6 +107,8 @@ interface Hud {
   multipliers: number[];
   hints: string[];
   countdown: number | null;
+  /** Id of the pose card that is coming up now (drives the "next poses" list). */
+  currentId: number | null;
 }
 
 export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgain, onModes, onLeaderboard }: DanceScreenProps) {
@@ -107,6 +131,7 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
     multipliers: Array.from({ length: players }, () => 1),
     hints: Array.from({ length: players }, () => ''),
     countdown: null,
+    currentId: null,
   }));
   const hudRef = useRef(hud);
   const [recorded, setRecorded] = useState<RecordedSession | null>(null);
@@ -194,10 +219,12 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
       // Error mode on the dance floor: which arm to move, and which way.
       hints: angles.map((a) => (current && songTime >= current.at - DANCE_CONFIG.leadMs * 0.6 ? danceHint(a, current.pose) : '')),
       countdown: stageRef.current === 'playing' && introBeat >= 4 && introBeat < 8 ? 8 - introBeat : null,
+      currentId: current?.id ?? null,
     };
     const prev = hudRef.current;
     const changed =
       next.countdown !== prev.countdown ||
+      next.currentId !== prev.currentId ||
       next.loading !== prev.loading ||
       next.visible.some((v, i) => v !== prev.visible[i]) ||
       next.statuses.some((v, i) => v !== prev.statuses[i]) ||
@@ -344,6 +371,7 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
             </>
           )}
         </div>
+        {stage !== 'done' && <NextPoses dance={dance} currentId={hud.currentId} />}
         <p className="dance__tip">
           {players === 2
             ? 'Игрок 1 — слева, игрок 2 — справа, оба видны по пояс. В подсвеченной зоне хватает места развести руки в стороны; если игра просит отойти — шагните назад.'

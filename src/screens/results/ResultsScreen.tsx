@@ -35,6 +35,14 @@ interface ResultsScreenProps {
 
 const seconds = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.round((ms % 60000) / 1000)).padStart(2, '0')}`;
 
+/** Error mode in four words: how every move is judged (the same labels as the in-game hint). */
+const VERDICTS = [
+  { tone: 'correct', label: 'Есть', text: 'движение засчитано' },
+  { tone: 'near', label: 'Почти', text: 'не хватает амплитуды — шкала показывает, сколько' },
+  { tone: 'wrong', label: 'Исправь', text: 'ошибка в технике — подсказка называет часть тела и направление' },
+  { tone: 'other', label: 'Не то движение', text: 'сделан другой жест — подсказка напомнит нужный' },
+] as const;
+
 function MoveCard({ title, move, tone, scheme }: { title: string; move: MoveStats | null; tone: 'good' | 'work'; scheme: ControlScheme }) {
   if (!move) return null;
   const meta = motionMeta(move.motion, scheme);
@@ -266,6 +274,14 @@ export function ResultsScreen({ engine, result, mode, recorded, profile, duel, o
           ) : (
             <p className="panel__empty">Ни одного промаха — все движения засчитаны.</p>
           )}
+          <ul className="verdicts" aria-label="Как система оценивает движение">
+            {VERDICTS.map((v) => (
+              <li key={v.tone} data-tone={v.tone}>
+                <b>{v.label}</b>
+                <span>{v.text}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 

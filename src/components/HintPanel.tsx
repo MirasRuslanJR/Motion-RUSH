@@ -20,13 +20,20 @@ interface HintPanelProps {
   variant?: 'full' | 'compact';
   /** In-game: the move the coming obstacle needs, shown big on top of the hint. */
   headline?: { title: string; arrow: Arrow | null } | null;
+  /** Full panel with nothing to correct yet: what to tell the player instead of an empty meter. */
+  idle?: string;
 }
 
 /**
  * Error mode made visible: what is wrong, which body part, which direction,
  * and a live meter of how far the player is from the target.
  */
-export function HintPanel({ engine, variant = 'full', headline = null }: HintPanelProps) {
+export function HintPanel({
+  engine,
+  variant = 'full',
+  headline = null,
+  idle = 'Начни движение — здесь появится подсказка, что поправить',
+}: HintPanelProps) {
   const hint = useMotionUi(engine, (s) => s.hint);
   const fillRef = useRef<HTMLDivElement>(null);
   const valueRef = useRef<HTMLSpanElement>(null);
@@ -50,6 +57,7 @@ export function HintPanel({ engine, variant = 'full', headline = null }: HintPan
           {hint && <span className="hint__label">{VERDICT_LABEL[hint.verdict]}</span>}
         </div>
       )}
+      {!hint && !headline && variant === 'full' && <p className="hint__idle">{idle}</p>}
       <AnimatePresence mode="popLayout" initial={false}>
         {hint && (
           <motion.div

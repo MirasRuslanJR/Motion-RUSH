@@ -18,7 +18,8 @@ const HOW_TO: { title: string; text: string }[] = [
   { title: 'Двигайся', text: 'Перебегай, прыгай, приседай, танцуй. Ошибёшься — игра подскажет, как правильно.' },
 ];
 
-const FEATURES = [`${GAME_MODES.length} режимов`, 'Танцпол с музыкой', 'Игра вдвоём', 'Онлайн-дуэль', 'Мировой рейтинг'];
+const FEATURES = [`${GAME_MODES.length} режимов`, 'Танцпол с музыкой', 'Игра вдвоём', 'Онлайн-дуэль'];
+const TITLE = ['Беги.', 'Прыгай.', 'Танцуй.'];
 
 interface LandingScreenProps {
   profile: Profile;
@@ -38,31 +39,21 @@ export function LandingScreen({ profile, onStart, onLeaderboard }: LandingScreen
           Игра, где контроллер — это ты
         </p>
         <h1 className="t-display landing__title">
-          <motion.span initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-            Move.
-          </motion.span>
-          <motion.span
-            className="landing__title-accent"
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-          >
-            Don&rsquo;t click.
-          </motion.span>
+          {TITLE.map((word, i) => (
+            <motion.span
+              key={word}
+              className={i === 1 ? 'landing__title-accent' : undefined}
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: i * 0.1 }}
+            >
+              {word}
+            </motion.span>
+          ))}
         </h1>
         <p className="landing__lead">
-          Беги, прыгай и танцуй перед обычной веб-камерой. Никаких кнопок — только ты и твои движения.
+          Обычная веб-камера вместо джойстика. Игра видит твоё тело, а если движение неточное — подскажет, что исправить.
         </p>
-
-        <ol className="landing__how" aria-label="Как играть">
-          {HOW_TO.map((step, i) => (
-            <li key={step.title}>
-              <span className="landing__how-num">{i + 1}</span>
-              <span className="landing__how-title">{step.title}</span>
-              <span className="landing__how-text">{step.text}</span>
-            </li>
-          ))}
-        </ol>
 
         <div className="landing__actions">
           <motion.button
@@ -82,8 +73,19 @@ export function LandingScreen({ profile, onStart, onLeaderboard }: LandingScreen
           </button>
         </div>
         <p className="landing__privacy">
-          <Icon name="camera" size={14} /> Настройка займёт около 30 секунд · регистрация не нужна
+          <Icon name="camera" size={14} />
+          <span>Настройка — около 30 секунд, без регистрации</span>
         </p>
+
+        <ol className="landing__how" aria-label="Как играть">
+          {HOW_TO.map((step, i) => (
+            <li key={step.title}>
+              <span className="landing__how-num">{i + 1}</span>
+              <span className="landing__how-title">{step.title}</span>
+              <span className="landing__how-text">{step.text}</span>
+            </li>
+          ))}
+        </ol>
         {!cameraApi && (
           <p className="landing__warning" role="alert">
             Этот браузер не даёт доступ к камере. Открой сайт в Chrome, Edge, Safari или Firefox по https.

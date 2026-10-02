@@ -10,7 +10,7 @@ import type { MotionEngine, MotionFrame } from '../../features/engine/MotionEngi
 import type { Diagnosis } from '../../features/gestures/ErrorDiagnosisEngine';
 import { motionMeta, type ControlScheme, type ExpectedMotion, type GestureType } from '../../features/gestures/types';
 import { GameEngine, type GameEvent, type PlayerInput } from '../../features/gameplay/GameEngine';
-import { isPickup, OBSTACLE_REQUIREMENT, type GameOutcome, type Lane, type SessionResult } from '../../features/gameplay/types';
+import { isPickup, OBSTACLE_REQUIREMENT, type CourseItem, type GameOutcome, type Lane, type SessionResult } from '../../features/gameplay/types';
 import { courseForMode, rulesForMode, type GameModeDef } from '../../features/modes/modes';
 import { computeSessionStats } from '../../features/results/sessionStats';
 import type { DuelRoom } from '../../features/online/DuelRoom';
@@ -151,6 +151,54 @@ function MoveLegend({ engine, next, scheme }: { engine: MotionEngine; next: Expe
         );
       })}
     </ul>
+  );
+}
+
+/** The current obstacle and the next few after it, in course order. */
+function upcoming(game: GameEngine, fromId: number | null, count: number): CourseItem[] {
+  const out: CourseItem[] = [];
+  if (fromId === null) return out;
+  let found = false;
+  for (const item of game.course) {
+    if (item.id === fromId) found = true;
+    if (!found || isPickup(item.kind)) continue;
+    out.push(item);
+    if (out.length >= count) break;
+  }
+  return out;
+}
+
+/** What is coming on the course, so the player can get ready for the next move. */
+function UpcomingQueue({ items, scheme }: { items: CourseItem[]; scheme: ControlScheme }) {
+  if (items.length === 0) return null;
+  return (
+    <section className="queue" aria-label="Дальше по трассе">
+      <span className="t-label">Дальше по трассе</span>
+      <ol className="queue__list">
+        <AnimatePresence initial={false} mode="popLayout">
+          {items.map((item, i) => {
+            const kind = item.kind;
+            if (isPickup(kind)) return null;
+            const meta = motionMeta(OBSTACLE_REQUIREMENT[kind], scheme);
+            return (
+              <motion.li
+                key={item.id}
+                layout
+                className={i === 0 ? 'is-now' : undefined}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1 - i * 0.2, y: 0 }}
+                exit={{ opacity: 0, y: -14 }}
+                transition={{ duration: 0.25 }}
+              >
+                <span className="queue__icon">{meta.arrow ? <Icon name={meta.arrow} size={16} /> : <span className="queue__dot" />}</span>
+                <span className="queue__name">{meta.title}</span>
+                {i === 0 && <span className="queue__tag">сейчас</span>}
+              </motion.li>
+            );
+          })}
+        </AnimatePresence>
+      </ol>
+    </section>
   );
 }
 
@@ -456,6 +504,7 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
           </div>
         )}
         <MoveLegend engine={engine} next={playing ? nextMotion : null} scheme={scheme} />
+        <UpcomingQueue items={playing ? upcoming(game, hud.nextId, 4) : []} scheme={scheme} />
       </aside>
     </main>
   );
