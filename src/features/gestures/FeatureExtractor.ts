@@ -57,7 +57,8 @@ export interface BodyFeatures extends BodyGeometry {
   hipShiftX: number | null;
   /**
    * Position in the play area (-1 left edge … +1 right edge), from the hips
-   * (shoulders if hips are hidden). null when no play area is known.
+   * (shoulders if hips are hidden or the baseline picks lanes by the shoulders).
+   * null when no play area is known.
    */
   zoneX: number | null;
   /**
@@ -153,6 +154,7 @@ export function extractFeatures(pose: Pose, baseline: Baseline | null): BodyFeat
   const crouchDepth = normalizeByBodyScale(g.shoulderCenter.y - ref.y, scale);
   const baseHip = baseline?.hipCenter ?? null;
   const hipDrop = g.hipCenter && baseHip ? normalizeByBodyScale(g.hipCenter.y - baseHip.y, scale) : null;
+  const laneX = baseline?.laneFrom === 'shoulders' ? g.shoulderCenter.x : (g.hipCenter ?? g.shoulderCenter).x;
 
   return {
     ...g,
@@ -162,7 +164,7 @@ export function extractFeatures(pose: Pose, baseline: Baseline | null): BodyFeat
     noseDrop: normalizeByBodyScale(g.nose.y - refNose.y, scale),
     hipDrop,
     hipShiftX: g.hipCenter && baseHip ? normalizeByBodyScale(g.hipCenter.x - baseHip.x, scale) : null,
-    zoneX: baseline?.region ? zoneOf((g.hipCenter ?? g.shoulderCenter).x, baseline.region) : null,
+    zoneX: baseline?.region ? zoneOf(laneX, baseline.region) : null,
     bodyRise: hipDrop === null ? -crouchDepth : Math.min(-hipDrop, -crouchDepth),
     leftHandLift,
     rightHandLift,

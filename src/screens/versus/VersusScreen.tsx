@@ -1,12 +1,12 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { CameraViewport } from '../../components/CameraViewport';
 import { Icon } from '../../components/Icon';
 import type { MotionEngine, MotionFrame } from '../../features/engine/MotionEngine';
 import { GameEngine, type GameEvent, type PlayerInput } from '../../features/gameplay/GameEngine';
 import { isPickup, OBSTACLE_REQUIREMENT } from '../../features/gameplay/types';
 import { isErrorVerdict } from '../../features/gestures/ErrorDiagnosisEngine';
-import { motionMeta, schemeOf, type Arrow } from '../../features/gestures/types';
+import { motionMeta, schemeOf, type Arrow, type ExpectedMotion } from '../../features/gestures/types';
 import { courseForMode, rulesForMode, type GameModeDef } from '../../features/modes/modes';
 import { PLAYER_COLORS } from '../../features/render/DanceRenderer';
 import { GameRenderer } from '../../features/render/GameRenderer';
@@ -33,6 +33,8 @@ const MISS_MS = 2200;
 /** After the race a jump counts as "rematch" only after this pause. */
 const REMATCH_ARM_MS = 1500;
 const GO_MS = 700;
+/** Two players change lane by a lean or a small step, so the cue names just the direction. */
+const LANE_CUES: Partial<Record<ExpectedMotion, string>> = { LEAN_LEFT: 'Влево', LEAN_RIGHT: 'Вправо' };
 
 interface SideHud {
   status: string;
@@ -110,6 +112,7 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
   const [music] = useState(() => new RunnerMusic());
   useEffect(() => () => music.stop(), [music]);
   const hudKey = useRef('');
+  const standZones = useCallback(() => trackers.current?.map((t) => t.standZone) ?? [], []);
 
   useEffect(() => {
     engine.setExpected(null);
@@ -118,7 +121,10 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
     for (let i = 0; i < 2; i++) {
       const c = canvases.current[i];
       const b = backgrounds.current[i];
-      if (c && b) list.push(new GameRenderer(c, b));
+      if (!c || !b) continue;
+      const renderer = new GameRenderer(c, b);
+      renderer.labels = LANE_CUES;
+      list.push(renderer);
     }
     renderers.current = list;
     return () => {
@@ -165,7 +171,8 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
         renderer.render(game, view, dt, now);
       }
       const next = game.nextRequired;
-      const meta = next && !isPickup(next.kind) && game.phase === 'running' ? motionMeta(OBSTACLE_REQUIREMENT[next.kind], schemeOf(t.baseline?.mode)) : null;
+      const motion = next && !isPickup(next.kind) && game.phase === 'running' ? OBSTACLE_REQUIREMENT[next.kind] : null;
+      const meta = motion ? motionMeta(motion, schemeOf(t.baseline?.mode)) : null;
       const hint = t.hint && isErrorVerdict(t.hint.verdict) ? t.hint.message : null;
       const miss = misses.current[i];
       return {
@@ -176,7 +183,7 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
         score: game.score,
         energy: game.energy,
         combo: game.combo,
-        cueTitle: meta?.title ?? null,
+        cueTitle: motion ? (LANE_CUES[motion] ?? meta?.title ?? null) : null,
         cueArrow: meta?.arrow ?? null,
         hint,
         miss: miss && now - miss.at < MISS_MS ? miss.message : null,
@@ -284,7 +291,7 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
             <p className="t-label">{mode.title} · игра вдвоём</p>
             <h2 className="t-headline">Встаньте рядом: игрок 1 слева, игрок 2 справа</h2>
             <div className="versus__cam">
-              <CameraViewport engine={engine} variant="panel" hud={false} className="versus__camera" />
+              <CameraViewport engine={engine} variant="panel" hud={false} standZones={standZones} className="versus__camera" />
               <span className="versus__cam-label versus__cam-label--p1">Игрок 1</span>
               <span className="versus__cam-label versus__cam-label--p2">Игрок 2</span>
             </div>
@@ -307,8 +314,8 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
               </div>
             )}
             <p className="overlay__message">
-              Отойдите на 2–3 шага, чтобы камера видела вас целиком, и постойте ровно секунду. Полоса меняется одним шагом влево или
-              вправо от своего места — идти к соседу не нужно. Прыжок и присед — как в обычной игре.
+              Встаньте в 2–3 шагах от камеры, каждый в свою подсвеченную зону, и постойте ровно секунду. Полосу меняет наклон корпуса
+              или маленький шаг влево-вправо — ходить никуда не нужно. Прыжок и присед — как в обычной игре.
             </p>
           </motion.div>
         )}

@@ -1,7 +1,7 @@
 import { GESTURE_CONFIG } from '../../config/gesture.config';
 import { adaptBaselineDrift, Calibrator, type Baseline, type CalibrationProgress } from '../gestures/calibration';
 import { diagnose, HintScheduler, type Diagnosis } from '../gestures/ErrorDiagnosisEngine';
-import { extractFeatures, extractGeometry, type BodyFeatures } from '../gestures/FeatureExtractor';
+import { extractFeatures, extractGeometry, type BodyFeatures, type BodyGeometry } from '../gestures/FeatureExtractor';
 import { classify } from '../gestures/GestureClassifier';
 import { GestureStateMachine } from '../gestures/GestureStateMachine';
 import type { ExpectedMotion } from '../gestures/types';
@@ -16,14 +16,36 @@ const HOLD_MS = 320;
 /** Two people side by side rarely stand perfectly still: a shorter, more tolerant capture. */
 const QUICK_CALIBRATION = { ...GESTURE_CONFIG.calibration, durationMs: 1400, maxDriftSW: 0.24 };
 /**
- * Lanes for two players are measured from where each player stood at
- * calibration (±this many shoulder widths), not from the halves of the
- * picture — so changing lane is one short step from your own spot and never
- * means walking over to the other player.
+ * Two players share the width of one picture, so lanes are measured from each
+ * player's own spot and follow the SHOULDERS: the lane area is ±this many
+ * shoulder widths, and the step thresholds then ask for a ~0.4 SW (≈15 cm)
+ * shift — a lean or one small step. Nobody has to walk toward the other player
+ * or out of the picture.
  */
-const LANE_HALF_SW = 2;
-/** Each player must stand at least this far (shoulder widths) from the middle line. */
-const MIN_GAP_SW = 1.4;
+const LANE_HALF_SW = 1.3;
+/** Room a player needs on both sides of their spot (SW): the lane shift plus half a body. */
+const ROOM_SW = 1;
+/** Once inside their zone, a player may sway this far (SW) past its edge without restarting. */
+const ZONE_SLACK_SW = 0.15;
+/** A stand zone narrower than this (SW) means the players are too close to the camera. */
+const MIN_ZONE_SW = 0.3;
+/** Shoulder width assumed before the player is seen (frame units, ~2.5 m from a laptop camera). */
+const DEFAULT_SW = 0.2;
+
+/** What a player must do before calibrating; left / right are their own (the picture is mirrored). */
+export type Placement = 'ok' | 'move-left' | 'move-right' | 'step-back';
+
+/** Where a player should stand, in frame units of the mirrored picture. */
+export interface StandZone {
+  x0: number;
+  x1: number;
+  /** The player stands inside it. */
+  ok: boolean;
+}
+
+function laneRegion(x: number, sw: number): { x0: number; x1: number } {
+  return { x0: x - LANE_HALF_SW * sw, x1: x + LANE_HALF_SW * sw };
+}
 
 function toInput(d: Diagnosis | null): DiagnosisInput | null {
   return d ? { expected: d.expected, verdict: d.verdict, ruleId: d.ruleId, message: d.message } : null;
@@ -31,16 +53,18 @@ function toInput(d: Diagnosis | null): DiagnosisInput | null {
 
 /**
  * One player's own recognition pipeline for local two-player games:
- * smoothing → quick calibration → features → classifier → state machines →
- * error-mode diagnosis. Lanes are a short step left / right of the spot the
- * player calibrated on.
+ * placement → smoothing → quick calibration → features → classifier → state
+ * machines → error-mode diagnosis. Lanes are a lean or a small step left /
+ * right of the spot the player calibrated on.
  */
 export class PlayerTracker {
   /** 0 = player 1 (left half of the mirrored picture), 1 = player 2. */
   readonly side: 0 | 1;
-  private readonly middle: number;
-  /** Standing too close to the middle line — calibration waits. */
-  tooCloseToMiddle = false;
+  private readonly aspect: number;
+  /** Before calibration: can both lane changes fit where the player stands (null = not seen)? */
+  placement: Placement | null = null;
+  /** Before calibration: where to stand (drawn on the setup camera); null once calibrated. */
+  standZone: StandZone | null;
   baseline: Baseline | null = null;
   pose: Pose | null = null;
   features: BodyFeatures | null = null;
@@ -61,7 +85,8 @@ export class PlayerTracker {
 
   constructor(side: 0 | 1, aspect: number) {
     this.side = side;
-    this.middle = aspect / 2;
+    this.aspect = aspect;
+    this.standZone = { ...this.zoneFor(DEFAULT_SW), ok: false };
   }
 
   get trackable(): boolean {
@@ -94,10 +119,9 @@ export class PlayerTracker {
     const pose = this.pose;
     if (!this.baseline) {
       const geometry = pose ? extractGeometry(pose) : null;
-      // Too close to the middle: a lane step would cross into the other player's half.
-      const spot = geometry ? (geometry.hipCenter ?? geometry.shoulderCenter).x : null;
-      this.tooCloseToMiddle = geometry !== null && spot !== null && Math.abs(spot - this.middle) < MIN_GAP_SW * geometry.shoulderWidth;
-      if (this.tooCloseToMiddle) {
+      this.placement = this.place(geometry);
+      if (this.placement !== null && this.placement !== 'ok') {
+        // Calibrating here would leave no room for one of the lane changes.
         this.calibrator.reset();
         this.calibration = { progress: 0, issue: null, done: false };
         return;
@@ -105,9 +129,8 @@ export class PlayerTracker {
       this.calibration = this.calibrator.push(geometry, pose !== null, now);
       const captured = this.calibrator.baseline;
       if (this.calibration.done && captured) {
-        const x = (captured.hipCenter ?? captured.shoulderCenter).x;
-        const half = LANE_HALF_SW * captured.scale;
-        this.baseline = { ...captured, region: { x0: x - half, x1: x + half } };
+        this.baseline = { ...captured, laneFrom: 'shoulders', region: laneRegion(captured.shoulderCenter.x, captured.scale) };
+        this.standZone = null;
       }
       return;
     }
@@ -125,7 +148,11 @@ export class PlayerTracker {
     const feats = { leanX: features.leanX, crouchDepth: features.crouchDepth, leftHandLift: features.leftHandLift, rightHandLift: features.rightHandLift };
     const events = [...this.lateral.update(c, feats, now), ...this.vertical.update(c, feats, now)];
     if (events.some((e) => e.type === 'JUMP' && e.phase === 'start')) this.jumped = true;
-    if (this.lateral.current.phase === 'NEUTRAL' && this.vertical.current.phase === 'NEUTRAL') adaptBaselineDrift(this.baseline, features, dt);
+    if (this.lateral.current.phase === 'NEUTRAL' && this.vertical.current.phase === 'NEUTRAL') {
+      adaptBaselineDrift(this.baseline, features, dt);
+      // The lane area follows the slowly re-centred neutral spot.
+      this.baseline.region = laneRegion(this.baseline.shoulderCenter.x, this.baseline.scale);
+    }
     this.diagnosis = this.expected ? diagnose(this.expected, features, c, this.baseline, now) : null;
     this.hints.update(this.diagnosis, now);
   }
@@ -148,7 +175,16 @@ export class PlayerTracker {
   get setupStatus(): string {
     if (this.baseline) return 'Готов!';
     if (!this.pose) return 'Не вижу — встань в свою половину';
-    if (this.tooCloseToMiddle) return 'Отойди на шаг от середины';
+    switch (this.placement) {
+      case 'step-back':
+        return 'Отойди на шаг назад';
+      case 'move-left':
+        return 'Сдвинься левее';
+      case 'move-right':
+        return 'Сдвинься правее';
+      default:
+        break;
+    }
     switch (this.calibration.issue) {
       case 'ARMS_UP':
         return 'Опусти руки';
@@ -157,5 +193,28 @@ export class PlayerTracker {
       default:
         return 'Стой ровно…';
     }
+  }
+
+  /** The player's half of the picture, minus room for a lane change on both sides. */
+  private zoneFor(sw: number): { x0: number; x1: number } {
+    const middle = this.aspect / 2;
+    const room = ROOM_SW * sw;
+    return this.side === 0 ? { x0: room, x1: middle - room } : { x0: middle + room, x1: this.aspect - room };
+  }
+
+  private place(geometry: BodyGeometry | null): Placement | null {
+    const sw = geometry?.shoulderWidth ?? DEFAULT_SW;
+    const zone = this.zoneFor(sw);
+    let placement: Placement | null = null;
+    if (geometry) {
+      const x = geometry.shoulderCenter.x;
+      const slack = this.placement === 'ok' ? ZONE_SLACK_SW * sw : 0;
+      if (zone.x1 - zone.x0 < MIN_ZONE_SW * sw) placement = 'step-back';
+      else if (x < zone.x0 - slack) placement = 'move-right';
+      else if (x > zone.x1 + slack) placement = 'move-left';
+      else placement = 'ok';
+    }
+    this.standZone = placement === 'step-back' ? null : { ...zone, ok: placement === 'ok' };
+    return placement;
   }
 }

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import type { MotionEngine } from '../features/engine/MotionEngine';
 import { motionMeta } from '../features/gestures/types';
 import { CameraOverlayRenderer } from '../features/render/CameraOverlayRenderer';
+import type { StandZone } from '../features/versus/PlayerTracker';
 import { useEngineFrame, useMotionUi } from '../hooks/useEngine';
 import { Icon } from './Icon';
 import './CameraViewport.css';
@@ -14,6 +15,8 @@ interface CameraViewportProps {
   trail?: boolean;
   /** Show the corner HUD (tracking %, recognised gesture). */
   hud?: boolean;
+  /** Two-player setup: where each player should stand, read every frame. */
+  standZones?: () => readonly (StandZone | null)[];
   children?: ReactNode;
   className?: string;
 }
@@ -28,6 +31,7 @@ export function CameraViewport({
   guidance = false,
   trail = true,
   hud = true,
+  standZones,
   children,
   className,
 }: CameraViewportProps) {
@@ -66,7 +70,7 @@ export function CameraViewport({
   }, []);
 
   useEngineFrame(engine, (frame, _dt) => {
-    rendererRef.current?.render(frame, frame.time, { guidance, trail });
+    rendererRef.current?.render(frame, frame.time, { guidance, trail, standZones: standZones?.() });
     // Tracking confidence text: throttled DOM write, no React render.
     if (hud && frame.time - lastHudUpdate.current > 150 && confidenceRef.current) {
       lastHudUpdate.current = frame.time;

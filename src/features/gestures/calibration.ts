@@ -20,10 +20,15 @@ export interface Baseline {
   /** full = hips visible (standing back), upper = seated / close framing. */
   mode: BodyMode;
   /**
-   * Horizontal play area in frame units (the whole frame, or one half in
-   * two-player mode). Lanes in the body scheme are thirds of it.
+   * Horizontal play area in frame units: the whole frame, or in two-player mode
+   * a short span around the player's own spot. Lanes in the body scheme are thirds of it.
    */
   region?: { x0: number; x1: number };
+  /**
+   * Body point that picks the lane: the hips (default — a real step) or the
+   * shoulders (a lean or a small step: two players with little room each).
+   */
+  laneFrom?: 'hips' | 'shoulders';
 }
 
 /** Where the body stands inside the play area: -1 left edge … 0 middle … +1 right edge. */

@@ -17,38 +17,79 @@ function feed(t: PlayerTracker, params: Partial<SyntheticPoseParams>, start: num
 }
 
 describe('two-player tracker', () => {
-  it('lanes are a short step from the spot the player calibrated on', () => {
+  it('a lean or one small step changes lane, swaying does not', () => {
     const p1 = new PlayerTracker(0, ASPECT);
+    expect(p1.standZone?.ok).toBe(false);
     let now = feed(p1, {}, 0, 70);
     expect(p1.baseline).not.toBeNull();
     expect(p1.setupStatus).toBe('Готов!');
+    expect(p1.standZone).toBeNull();
     expect(p1.input().lane).toBe(0);
 
-    // A real step (0.8 shoulder widths ≈ 30 cm) to the left / right changes lane…
-    now = feed(p1, { shift: -0.8 }, now);
+    // Leaning the torso — the feet stay where they are.
+    now = feed(p1, { leanDeg: -25 }, now);
     expect(p1.input().lane).toBe(-1);
-    now = feed(p1, { shift: 0.8 }, now);
+    now = feed(p1, { leanDeg: 25 }, now);
     expect(p1.input().lane).toBe(1);
+    // A small step (0.6 shoulder widths ≈ 20 cm) works too…
+    now = feed(p1, { shift: -0.6 }, now);
+    expect(p1.input().lane).toBe(-1);
     // …while swaying on the spot does not.
-    feed(p1, { shift: 0.25 }, now);
+    now = feed(p1, { shift: 0.15 }, now);
+    expect(p1.input().lane).toBe(0);
+    feed(p1, { leanDeg: 8 }, now);
     expect(p1.input().lane).toBe(0);
   });
 
-  it('works the same wherever in their half the player stands', () => {
-    // Player 2 standing off-centre in the right half: neutral is still the middle lane.
+  it('error mode asks for a lean or a step, never "the whole body"', () => {
+    const p1 = new PlayerTracker(0, ASPECT);
+    let now = feed(p1, {}, 0, 70);
+    p1.setExpected('LEAN_LEFT');
+    now = feed(p1, {}, now, 4);
+    expect(p1.diagnosis?.message).toBe('Наклонись или шагни влево');
+    feed(p1, { leanDeg: -13 }, now, 4);
+    expect(p1.diagnosis?.ruleId).toBe('LEAN_INSUFFICIENT');
+    expect(p1.diagnosis?.message).toBe('Ещё чуть левее — наклонись сильнее');
+  });
+
+  it('lanes are measured from where each player stands', () => {
+    // Player 2 off-centre in the right half: neutral is still the middle lane.
     const p2 = new PlayerTracker(1, ASPECT);
-    const now = feed(p2, { cx: 1.1 }, 0, 70);
+    const now = feed(p2, { cx: 1.05 }, 0, 70);
     expect(p2.baseline).not.toBeNull();
     expect(p2.input().lane).toBe(0);
-    feed(p2, { cx: 1.1, shift: -0.8 }, now);
+    feed(p2, { cx: 1.05, leanDeg: -25 }, now);
     expect(p2.input().lane).toBe(-1);
   });
 
-  it('asks a player who stands at the middle line to step away before calibrating', () => {
+  it('sends a player at the edge or at the middle line into their zone first', () => {
+    // Player 1 at the left edge of the picture: no room to go left.
+    const p1 = new PlayerTracker(0, ASPECT);
+    feed(p1, { cx: 0.08 }, 0, 70);
+    expect(p1.placement).toBe('move-right');
+    expect(p1.baseline).toBeNull();
+    expect(p1.setupStatus).toBe('Сдвинься правее');
+    expect(p1.standZone?.ok).toBe(false);
+
+    // Player 1 right at the middle line: no room to go right.
+    const p1b = new PlayerTracker(0, ASPECT);
+    feed(p1b, { cx: ASPECT / 2 - 0.05 }, 0, 70);
+    expect(p1b.setupStatus).toBe('Сдвинься левее');
+
+    // Player 2 right at the middle line.
     const p2 = new PlayerTracker(1, ASPECT);
     feed(p2, { cx: ASPECT / 2 + 0.05 }, 0, 70);
-    expect(p2.tooCloseToMiddle).toBe(true);
+    expect(p2.setupStatus).toBe('Сдвинься правее');
     expect(p2.baseline).toBeNull();
-    expect(p2.setupStatus).toBe('Отойди на шаг от середины');
+  });
+
+  it('asks the players to step back when half a picture is too narrow for them', () => {
+    const p1 = new PlayerTracker(0, ASPECT);
+    // Shoulders a third of the frame height wide: half the picture is only two shoulder widths.
+    feed(p1, { cx: 0.33, sw: 0.33 }, 0, 70);
+    expect(p1.placement).toBe('step-back');
+    expect(p1.setupStatus).toBe('Отойди на шаг назад');
+    expect(p1.standZone).toBeNull();
+    expect(p1.baseline).toBeNull();
   });
 });

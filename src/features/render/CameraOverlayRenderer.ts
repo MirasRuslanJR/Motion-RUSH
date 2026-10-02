@@ -6,6 +6,7 @@ import { isErrorVerdict } from '../gestures/ErrorDiagnosisEngine';
 import { targetGuides } from '../gestures/targetPose';
 import type { GestureType } from '../gestures/types';
 import { BODY_PART_JOINTS, LM, lm, type BodyPart, type Pose } from '../tracking/landmarks';
+import type { StandZone } from '../versus/PlayerTracker';
 import { coverMapping, mapLen, mapX, mapY, observeCanvas, type ViewMapping } from './canvas';
 import { PALETTE, rgba } from './palette';
 import { drawArrow, drawSkeleton, MotionTrail, type Projector } from './skeletonRenderer';
@@ -37,6 +38,8 @@ export interface OverlayOptions {
   guidance: boolean;
   /** Draw the light trail behind hands and head. */
   trail: boolean;
+  /** Two-player setup: where each player should stand ([P1, P2]). */
+  standZones?: readonly (StandZone | null)[];
 }
 
 /**
@@ -83,7 +86,7 @@ export class CameraOverlayRenderer {
     this.sizing.setMaxDpr(frame.render.maxDpr);
     const { width, height, dpr } = this.sizing.size;
     if (frame.players.length > 0) {
-      this.renderPlayers(ctx, frame, now, width, height, dpr);
+      this.renderPlayers(ctx, frame, now, width, height, dpr, opts.standZones);
       return;
     }
     const pose = frame.displayPose;
@@ -220,9 +223,18 @@ export class CameraOverlayRenderer {
 
   /**
    * Two-player mode: both skeletons in their player colours, each half of the
-   * picture softly tinted, and the middle line both players must not cross.
+   * picture softly tinted, the middle line both players must not cross and,
+   * during setup, the zone each player should stand in.
    */
-  private renderPlayers(ctx: CanvasRenderingContext2D, frame: Readonly<MotionFrame>, now: number, width: number, height: number, dpr: number): void {
+  private renderPlayers(
+    ctx: CanvasRenderingContext2D,
+    frame: Readonly<MotionFrame>,
+    now: number,
+    width: number,
+    height: number,
+    dpr: number,
+    standZones: readonly (StandZone | null)[] | undefined,
+  ): void {
     const resized = width !== this.lastWidth || height !== this.lastHeight || dpr !== this.lastDpr;
     if (!resized && now - this.lastDrawAt < frame.render.overlayIntervalMs - 1) return;
     this.lastDrawAt = now;
@@ -250,9 +262,52 @@ export class CameraOverlayRenderer {
     ctx.lineTo(mid, height);
     ctx.stroke();
     ctx.restore();
+    standZones?.forEach((zone, i) => {
+      if (zone) this.drawStandZone(ctx, zone, frame.displayPlayers[i] ?? null, PLAYER_TINTS[i] ?? PALETTE.cyan, height, now);
+    });
     frame.displayPlayers.forEach((pose, i) => {
       if (pose) drawSkeleton(ctx, pose, this.projector, { tone: 'tracking', tint: PLAYER_TINTS[i], glow: frame.render.glow });
     });
+  }
+
+  /** Two-player setup: the band to stand in (pulsing until the player is inside) and an arrow toward it. */
+  private drawStandZone(ctx: CanvasRenderingContext2D, zone: StandZone, pose: Pose | null, tint: string, height: number, now: number): void {
+    const a = this.projector.x(zone.x0);
+    const b = this.projector.x(zone.x1);
+    const x0 = Math.min(a, b);
+    const x1 = Math.max(a, b);
+    const color = zone.ok ? PALETTE.success : tint;
+    ctx.save();
+    ctx.globalAlpha = zone.ok ? 0.16 : 0.1 + 0.08 * (0.5 + 0.5 * Math.sin(now / 200));
+    ctx.fillStyle = color;
+    ctx.fillRect(x0, 0, x1 - x0, height);
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 6]);
+    for (const x of [x0, x1]) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = color;
+    ctx.font = '800 13px Manrope, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    // Upper part of the picture: below the corner tags, above the players' heads.
+    ctx.fillText(zone.ok ? 'СТОЙ ЗДЕСЬ' : 'ВСТАНЬ СЮДА', (x0 + x1) / 2, Math.max(56, height * 0.16));
+    if (!zone.ok && pose) {
+      // From the player's chest toward the zone.
+      const chest = midpoint(lm(pose, LM.LEFT_SHOULDER), lm(pose, LM.RIGHT_SHOULDER));
+      const from = { x: this.projector.x(chest.x), y: this.projector.y(chest.y) + this.projector.len(0.05) };
+      const inset = Math.min(24, (x1 - x0) / 2);
+      if (from.x < x0 || from.x > x1) {
+        drawArrow(ctx, from, { x: from.x < x0 ? x0 + inset : x1 - inset, y: from.y }, tint, Math.max(12, this.projector.len(0.035)), 0.95);
+      }
+    }
+    ctx.restore();
   }
 
   /** Rebuild highlight / error joint sets only when the gesture or diagnosis changes. */

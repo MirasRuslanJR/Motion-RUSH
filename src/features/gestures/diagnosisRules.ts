@@ -59,9 +59,11 @@ const toward = (dir: number) => (dir < 0 ? 'влево' : 'вправо');
 const further = (dir: number) => (dir < 0 ? 'левее' : 'правее');
 const sideArrow = (dir: number): Arrow => (dir < 0 ? 'left' : 'right');
 const body = (ctx: RuleContext) => ctx.scheme === 'body';
-/** How to move sideways in this scheme: "шагни" (whole body) or "наклонись" (seated). */
-const move = (ctx: RuleContext) => (body(ctx) ? 'шагни' : 'наклонись');
-const lateralFocus = (ctx: RuleContext): BodyPart[] => (body(ctx) ? ['hips', 'legs'] : ['shoulders', 'torso']);
+/** Two players at one camera: lanes follow the shoulders, so a lean counts as much as a step. */
+const leanOrStep = (ctx: RuleContext) => body(ctx) && ctx.baseline.laneFrom === 'shoulders';
+/** How to move sideways: "шагни" (standing, whole body) or "наклонись" (seated, or two players). */
+const move = (ctx: RuleContext) => (body(ctx) && !leanOrStep(ctx) ? 'шагни' : 'наклонись');
+const lateralFocus = (ctx: RuleContext): BodyPart[] => (body(ctx) && !leanOrStep(ctx) ? ['hips', 'legs'] : ['shoulders', 'torso']);
 const legsFocus: BodyPart[] = ['hips', 'legs'];
 
 /** Lateral shift toward the requested side, in SW (scheme-aware). */
@@ -248,7 +250,7 @@ export const DIAGNOSIS_RULES: readonly DiagnosisRule[] = [
     verdict: 'other',
     when: (ctx) => ctx.c.readings.JUMP.active && towardShift(ctx) < near(ctx),
     build: (ctx) => ({
-      message: body(ctx) ? `Прыгать не нужно — шагни ${toward(ctx.dir)}` : `Руки тут не помогут — наклони корпус ${toward(ctx.dir)}`,
+      message: body(ctx) ? `Прыгать не нужно — ${move(ctx)} ${toward(ctx.dir)}` : `Руки тут не помогут — наклони корпус ${toward(ctx.dir)}`,
       focus: lateralFocus(ctx),
       arrow: sideArrow(ctx.dir),
     }),
@@ -259,7 +261,7 @@ export const DIAGNOSIS_RULES: readonly DiagnosisRule[] = [
     schemes: STANDING,
     priority: 80,
     verdict: 'wrong',
-    when: (ctx) => ctx.dir * ctx.f.leanX >= BODY.step.shouldersOnlyShift && towardShift(ctx) < near(ctx),
+    when: (ctx) => !leanOrStep(ctx) && ctx.dir * ctx.f.leanX >= BODY.step.shouldersOnlyShift && towardShift(ctx) < near(ctx),
     build: (ctx) => ({
       message: `Двигаются только плечи — шагни ${toward(ctx.dir)} всем телом`,
       focus: ['hips', 'legs', 'shoulders'],
@@ -298,9 +300,11 @@ export const DIAGNOSIS_RULES: readonly DiagnosisRule[] = [
     verdict: 'near',
     when: (ctx) => towardShift(ctx) >= near(ctx),
     build: (ctx) => ({
-      message: body(ctx)
-        ? `Шагни ещё ${further(ctx.dir)} — всем телом`
-        : `Наклон недостаточный — сместись ещё ${further(ctx.dir)}`,
+      message: leanOrStep(ctx)
+        ? `Ещё чуть ${further(ctx.dir)} — наклонись сильнее`
+        : body(ctx)
+          ? `Шагни ещё ${further(ctx.dir)} — всем телом`
+          : `Наклон недостаточный — сместись ещё ${further(ctx.dir)}`,
       focus: lateralFocus(ctx),
       arrow: sideArrow(ctx.dir),
     }),
@@ -312,7 +316,11 @@ export const DIAGNOSIS_RULES: readonly DiagnosisRule[] = [
     verdict: 'idle',
     when: () => true,
     build: (ctx) => ({
-      message: body(ctx) ? `Шагни ${toward(ctx.dir)} всем телом` : `Наклони корпус ${toward(ctx.dir)}`,
+      message: leanOrStep(ctx)
+        ? `Наклонись или шагни ${toward(ctx.dir)}`
+        : body(ctx)
+          ? `Шагни ${toward(ctx.dir)} всем телом`
+          : `Наклони корпус ${toward(ctx.dir)}`,
       focus: lateralFocus(ctx),
       arrow: sideArrow(ctx.dir),
     }),
@@ -404,9 +412,11 @@ export const DIAGNOSIS_RULES: readonly DiagnosisRule[] = [
     verdict: 'wrong',
     when: () => true,
     build: (ctx) => ({
-      message: body(ctx)
-        ? `Вернись в центр — шагни ${ctx.lateral < 0 ? 'правее' : 'левее'}`
-        : `Верни корпус в центр — сместись ${ctx.lateral < 0 ? 'правее' : 'левее'}`,
+      message: leanOrStep(ctx)
+        ? 'Вернись в центр — встань ровно на своё место'
+        : body(ctx)
+          ? `Вернись в центр — шагни ${ctx.lateral < 0 ? 'правее' : 'левее'}`
+          : `Верни корпус в центр — сместись ${ctx.lateral < 0 ? 'правее' : 'левее'}`,
       focus: lateralFocus(ctx),
       arrow: ctx.lateral < 0 ? 'right' : 'left',
     }),

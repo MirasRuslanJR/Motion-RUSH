@@ -3,7 +3,7 @@ import { clamp, lerp, midpoint, type Point } from '../../lib/math/geometry';
 import type { MotionFrame } from '../engine/MotionEngine';
 import type { GameEngine, GameEvent } from '../gameplay/GameEngine';
 import { isPickup, OBSTACLE_REQUIREMENT, type CourseItem } from '../gameplay/types';
-import { motionMeta } from '../gestures/types';
+import { motionMeta, type ExpectedMotion } from '../gestures/types';
 import { createPose, LM, lm, type Pose } from '../tracking/landmarks';
 import { buildSyntheticPose } from '../tracking/syntheticPose';
 import { observeCanvas, type CanvasSize } from './canvas';
@@ -111,6 +111,8 @@ export class GameRenderer {
   /** Action word drawn above the next obstacle (cached per obstacle). */
   private labelFor = -1;
   private label = '';
+  /** Screen-specific words for some motions (two players: "Влево" instead of "Шаг влево"). */
+  labels: Partial<Record<ExpectedMotion, string>> = {};
 
   constructor(canvas: HTMLCanvasElement, background: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d');
@@ -261,7 +263,8 @@ export class GameRenderer {
     const nextId = next?.id ?? -1;
     if (next && next.id !== this.labelFor) {
       this.labelFor = next.id;
-      this.label = isPickup(next.kind) ? '' : motionMeta(OBSTACLE_REQUIREMENT[next.kind], game.rules.scheme).title.toUpperCase();
+      const motion = isPickup(next.kind) ? null : OBSTACLE_REQUIREMENT[next.kind];
+      this.label = motion ? (this.labels[motion] ?? motionMeta(motion, game.rules.scheme).title).toUpperCase() : '';
     }
     for (let i = course.length - 1; i >= 0; i--) {
       const item = course[i];
