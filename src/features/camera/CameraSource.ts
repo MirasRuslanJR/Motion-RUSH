@@ -34,6 +34,10 @@ export class CameraSource {
   readonly video: HTMLVideoElement;
   private stream: MediaStream | null = null;
   private endedHandler: (() => void) | null = null;
+  /** What the stream was opened with — restored when wide mode ends. */
+  private requested: MediaTrackConstraints = {};
+  private wide = false;
+  private switching: Promise<void> = Promise.resolve();
 
   constructor() {
     const video = document.createElement('video');
@@ -59,24 +63,23 @@ export class CameraSource {
     if (!navigator.mediaDevices?.getUserMedia) throw new CameraError('unsupported');
 
     const { idealWidth, idealHeight, idealFps } = TRACKING_CONFIG.camera;
-    const preferred: MediaStreamConstraints = {
-      audio: false,
-      video: {
-        facingMode: 'user',
-        width: { ideal: idealWidth },
-        height: { ideal: idealHeight },
-        frameRate: { ideal: idealFps, max: 60 },
-      },
+    const preferred: MediaTrackConstraints = {
+      facingMode: 'user',
+      width: { ideal: idealWidth },
+      height: { ideal: idealHeight },
+      frameRate: { ideal: idealFps, max: 60 },
     };
 
     let stream: MediaStream;
+    let requested = preferred;
     try {
-      stream = await navigator.mediaDevices.getUserMedia(preferred);
+      stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: preferred });
     } catch (error) {
       // Some cameras reject the preferred constraints — retry with anything available.
       if (error instanceof Error && error.name === 'OverconstrainedError') {
         try {
           stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+          requested = {};
         } catch (retryError) {
           throw new CameraError(classifyCameraError(retryError));
         }
@@ -86,6 +89,7 @@ export class CameraSource {
     }
 
     this.stream = stream;
+    this.requested = requested;
     for (const track of stream.getVideoTracks()) {
       track.addEventListener('ended', () => this.endedHandler?.());
     }
@@ -97,6 +101,37 @@ export class CameraSource {
       // the viewport retries play() once it is attached to the page.
     }
     await waitForFirstFrame(this.video);
+    if (this.wide) await this.applyWide(true);
+  }
+
+  /**
+   * Two-player modes want the camera's whole width (16:9); leaving them
+   * restores the original request, so the camera returns to the same mode and
+   * a single-player calibration stays valid. Calls are applied in order.
+   */
+  setWide(wide: boolean): Promise<void> {
+    if (wide === this.wide) return this.switching;
+    this.wide = wide;
+    this.switching = this.switching.then(() => this.applyWide(wide));
+    return this.switching;
+  }
+
+  private async applyWide(wide: boolean): Promise<void> {
+    const track = this.stream?.getVideoTracks()[0];
+    if (!track || track.readyState !== 'live') return;
+    const settings = track.getSettings();
+    // Phones hold the camera upright: a landscape request would only crop the picture.
+    if (wide && settings.width && settings.height && settings.width < settings.height) return;
+    const { wide: size, idealFps } = TRACKING_CONFIG.camera;
+    try {
+      await track.applyConstraints(
+        wide
+          ? { width: { ideal: size.idealWidth }, height: { ideal: size.idealHeight }, aspectRatio: { ideal: 16 / 9 }, frameRate: { ideal: idealFps, max: 60 } }
+          : this.requested,
+      );
+    } catch {
+      // Keep whatever the camera gives: every screen adapts to the picture's shape.
+    }
   }
 
   /** Resume playback after the element was moved in the DOM. */
@@ -124,6 +159,7 @@ export class CameraSource {
 
   stop(): void {
     this.endedHandler = null;
+    this.wide = false;
     if (this.stream) {
       for (const track of this.stream.getTracks()) track.stop();
     }

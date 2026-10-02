@@ -163,7 +163,8 @@
 
 .versus__camera {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  /* The whole (wide) picture: both players and their zones stay visible. */
+  aspect-ratio: var(--video-aspect, 4 / 3);
 }
 
 .versus__cam-label {

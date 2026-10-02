@@ -6,7 +6,7 @@ import { isErrorVerdict } from '../gestures/ErrorDiagnosisEngine';
 import { targetGuides } from '../gestures/targetPose';
 import type { GestureType } from '../gestures/types';
 import { BODY_PART_JOINTS, LM, lm, type BodyPart, type Pose } from '../tracking/landmarks';
-import type { StandZone } from '../versus/PlayerTracker';
+import type { StandZone } from '../versus/standZone';
 import { coverMapping, mapLen, mapX, mapY, observeCanvas, type ViewMapping } from './canvas';
 import { PALETTE, rgba } from './palette';
 import { drawArrow, drawSkeleton, MotionTrail, type Projector } from './skeletonRenderer';

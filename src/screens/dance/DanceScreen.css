@@ -138,6 +138,11 @@
   text-align: center;
 }
 
+/* Waiting for the dancers: their avatars stay visible, but calm behind the text. */
+.dance__overlay {
+  background: radial-gradient(120% 90% at 50% 50%, rgba(8, 9, 16, 0.88), rgba(8, 9, 16, 0.7));
+}
+
 .dance__countdown {
   position: absolute;
   left: 50%;
@@ -232,7 +237,7 @@
 
 .dance__camera {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: var(--video-aspect, 4 / 3);
   flex: none;
 }
 

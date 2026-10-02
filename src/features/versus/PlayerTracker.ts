@@ -1,7 +1,7 @@
 import { GESTURE_CONFIG } from '../../config/gesture.config';
 import { adaptBaselineDrift, Calibrator, type Baseline, type CalibrationProgress } from '../gestures/calibration';
 import { diagnose, HintScheduler, type Diagnosis } from '../gestures/ErrorDiagnosisEngine';
-import { extractFeatures, extractGeometry, type BodyFeatures, type BodyGeometry } from '../gestures/FeatureExtractor';
+import { extractFeatures, extractGeometry, type BodyFeatures } from '../gestures/FeatureExtractor';
 import { classify } from '../gestures/GestureClassifier';
 import { GestureStateMachine } from '../gestures/GestureStateMachine';
 import type { ExpectedMotion } from '../gestures/types';
@@ -9,6 +9,7 @@ import type { DiagnosisInput, PlayerInput } from '../gameplay/GameEngine';
 import type { Lane } from '../gameplay/types';
 import { copyPoseInto, createPose, LM, lm, type Pose } from '../tracking/landmarks';
 import { MotionSmoother } from '../tracking/MotionSmoother';
+import { StandGuide, STAND_ROOM_SW, type Placement, type StandZone } from './standZone';
 
 /** Pose loss shorter than this keeps the last pose (like the main engine). */
 const HOLD_MS = 320;
@@ -23,25 +24,8 @@ const QUICK_CALIBRATION = { ...GESTURE_CONFIG.calibration, durationMs: 1400, max
  * or out of the picture.
  */
 const LANE_HALF_SW = 1.3;
-/** Room a player needs on both sides of their spot (SW): the lane shift plus half a body. */
-const ROOM_SW = 1;
-/** Once inside their zone, a player may sway this far (SW) past its edge without restarting. */
-const ZONE_SLACK_SW = 0.15;
-/** A stand zone narrower than this (SW) means the players are too close to the camera. */
-const MIN_ZONE_SW = 0.3;
-/** Shoulder width assumed before the player is seen (frame units, ~2.5 m from a laptop camera). */
-const DEFAULT_SW = 0.2;
-
-/** What a player must do before calibrating; left / right are their own (the picture is mirrored). */
-export type Placement = 'ok' | 'move-left' | 'move-right' | 'step-back';
-
-/** Where a player should stand, in frame units of the mirrored picture. */
-export interface StandZone {
-  x0: number;
-  x1: number;
-  /** The player stands inside it. */
-  ok: boolean;
-}
+/** The picture changed shape after calibration (camera switched to wide): calibrate again. */
+const ASPECT_CHANGE = 0.02;
 
 function laneRegion(x: number, sw: number): { x0: number; x1: number } {
   return { x0: x - LANE_HALF_SW * sw, x1: x + LANE_HALF_SW * sw };
@@ -60,11 +44,6 @@ function toInput(d: Diagnosis | null): DiagnosisInput | null {
 export class PlayerTracker {
   /** 0 = player 1 (left half of the mirrored picture), 1 = player 2. */
   readonly side: 0 | 1;
-  private readonly aspect: number;
-  /** Before calibration: can both lane changes fit where the player stands (null = not seen)? */
-  placement: Placement | null = null;
-  /** Before calibration: where to stand (drawn on the setup camera); null once calibrated. */
-  standZone: StandZone | null;
   baseline: Baseline | null = null;
   pose: Pose | null = null;
   features: BodyFeatures | null = null;
@@ -73,6 +52,8 @@ export class PlayerTracker {
   diagnosis: Diagnosis | null = null;
   /** Set when a jump starts — the caller reads and clears it (e.g. "jump for a rematch"). */
   jumped = false;
+  private readonly guide: StandGuide;
+  private calibratedAspect = 0;
   private expected: ExpectedMotion | null = null;
   private readonly hints = new HintScheduler();
   private readonly smoother = new MotionSmoother();
@@ -83,14 +64,23 @@ export class PlayerTracker {
   private lastSeen = Number.NEGATIVE_INFINITY;
   private lastUpdate = 0;
 
-  constructor(side: 0 | 1, aspect: number) {
+  constructor(side: 0 | 1) {
     this.side = side;
-    this.aspect = aspect;
-    this.standZone = { ...this.zoneFor(DEFAULT_SW), ok: false };
+    this.guide = new StandGuide(side, STAND_ROOM_SW.runner);
   }
 
   get trackable(): boolean {
     return this.pose !== null;
+  }
+
+  /** Before calibration: can both lane changes fit where the player stands (null = not seen)? */
+  get placement(): Placement | null {
+    return this.guide.placement;
+  }
+
+  /** Before calibration: where to stand (drawn on the setup camera); null once calibrated. */
+  get standZone(): StandZone | null {
+    return this.baseline ? null : this.guide.zone;
   }
 
   /** The throttled hint actually shown to the player. */
@@ -105,10 +95,14 @@ export class PlayerTracker {
     this.hints.reset();
   }
 
-  /** Feed one inference result for this player (null = not in their half of the picture). */
-  update(raw: Pose | null, now: number): void {
+  /**
+   * Feed one inference result for this player (null = not in their half of the
+   * picture). `aspect` = frame width / height of that result.
+   */
+  update(raw: Pose | null, now: number, aspect: number): void {
     const dt = this.lastUpdate ? now - this.lastUpdate : 33;
     this.lastUpdate = now;
+    if (this.baseline && Math.abs(aspect - this.calibratedAspect) > ASPECT_CHANGE) this.recalibrate(now);
     if (raw && Math.min(lm(raw, LM.LEFT_SHOULDER).v, lm(raw, LM.RIGHT_SHOULDER).v) >= 0.5) {
       this.lastSeen = now;
       this.pose = copyPoseInto(this.smoother.smooth(raw, now), this.buffer);
@@ -119,8 +113,8 @@ export class PlayerTracker {
     const pose = this.pose;
     if (!this.baseline) {
       const geometry = pose ? extractGeometry(pose) : null;
-      this.placement = this.place(geometry);
-      if (this.placement !== null && this.placement !== 'ok') {
+      const placement = this.guide.update(geometry, aspect);
+      if (placement !== null && placement !== 'ok') {
         // Calibrating here would leave no room for one of the lane changes.
         this.calibrator.reset();
         this.calibration = { progress: 0, issue: null, done: false };
@@ -130,7 +124,7 @@ export class PlayerTracker {
       const captured = this.calibrator.baseline;
       if (this.calibration.done && captured) {
         this.baseline = { ...captured, laneFrom: 'shoulders', region: laneRegion(captured.shoulderCenter.x, captured.scale) };
-        this.standZone = null;
+        this.calibratedAspect = aspect;
       }
       return;
     }
@@ -175,16 +169,8 @@ export class PlayerTracker {
   get setupStatus(): string {
     if (this.baseline) return 'Готов!';
     if (!this.pose) return 'Не вижу — встань в свою половину';
-    switch (this.placement) {
-      case 'step-back':
-        return 'Отойди на шаг назад';
-      case 'move-left':
-        return 'Сдвинься левее';
-      case 'move-right':
-        return 'Сдвинься правее';
-      default:
-        break;
-    }
+    const move = this.guide.message;
+    if (move) return move;
     switch (this.calibration.issue) {
       case 'ARMS_UP':
         return 'Опусти руки';
@@ -195,26 +181,15 @@ export class PlayerTracker {
     }
   }
 
-  /** The player's half of the picture, minus room for a lane change on both sides. */
-  private zoneFor(sw: number): { x0: number; x1: number } {
-    const middle = this.aspect / 2;
-    const room = ROOM_SW * sw;
-    return this.side === 0 ? { x0: room, x1: middle - room } : { x0: middle + room, x1: this.aspect - room };
-  }
-
-  private place(geometry: BodyGeometry | null): Placement | null {
-    const sw = geometry?.shoulderWidth ?? DEFAULT_SW;
-    const zone = this.zoneFor(sw);
-    let placement: Placement | null = null;
-    if (geometry) {
-      const x = geometry.shoulderCenter.x;
-      const slack = this.placement === 'ok' ? ZONE_SLACK_SW * sw : 0;
-      if (zone.x1 - zone.x0 < MIN_ZONE_SW * sw) placement = 'step-back';
-      else if (x < zone.x0 - slack) placement = 'move-right';
-      else if (x > zone.x1 + slack) placement = 'move-left';
-      else placement = 'ok';
-    }
-    this.standZone = placement === 'step-back' ? null : { ...zone, ok: placement === 'ok' };
-    return placement;
+  /** Positions from before a change of the picture's shape no longer match: start over. */
+  private recalibrate(now: number): void {
+    this.baseline = null;
+    this.features = null;
+    this.diagnosis = null;
+    this.calibrator.reset();
+    this.calibration = { progress: 0, issue: null, done: false };
+    this.lateral.reset(now);
+    this.vertical.reset(now);
+    this.smoother.reset();
   }
 }

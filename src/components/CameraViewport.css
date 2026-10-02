@@ -152,7 +152,8 @@
 
 .viewport--pip {
   width: 168px;
-  aspect-ratio: 4 / 3;
+  /* The camera's own shape (set by CameraViewport): 4:3, or 16:9 in two-player modes. */
+  aspect-ratio: var(--video-aspect, 4 / 3);
   border-radius: var(--radius-m);
 }
 

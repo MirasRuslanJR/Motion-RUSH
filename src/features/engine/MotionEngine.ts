@@ -114,6 +114,17 @@ function easePose(display: Pose, target: Pose, a: number): void {
   }
 }
 
+/** Moves a baseline sideways by `dx` frame units (the picture got wider or narrower around it). */
+function shiftBaseline(b: Baseline, dx: number): void {
+  b.shoulderCenter.x += dx;
+  b.nose.x += dx;
+  if (b.hipCenter) b.hipCenter.x += dx;
+  if (b.region) {
+    b.region.x0 += dx;
+    b.region.x1 += dx;
+  }
+}
+
 function summary(f: BodyFeatures | null): GestureEventFeatures | null {
   if (!f) return null;
   return { leanX: f.leanX, crouchDepth: f.crouchDepth, leftHandLift: f.leftHandLift, rightHandLift: f.rightHandLift };
@@ -177,6 +188,8 @@ export class MotionEngine {
   private primaryCenter: { x: number; y: number } | null = null;
   private disposed = false;
   private players = 1;
+  /** Frame aspect the single-player baseline was captured in. */
+  private baselineAspect = 0;
   private readonly peopleBuffers: Pose[] = [createPose(), createPose()];
   private readonly displayPlayerBuffers: Pose[] = [createPose(), createPose()];
 
@@ -264,6 +277,7 @@ export class MotionEngine {
           region: baseline.region ? { ...baseline.region } : { x0: 0, x1: this.frame.aspect },
         }
       : null;
+    this.baselineAspect = this.frame.aspect;
     if (baseline) this.ui.set({ scheme: schemeOf(baseline.mode) });
     this.emit([...this.lateralSM.reset(this.frame.time), ...this.verticalSM.reset(this.frame.time)]);
   }
@@ -271,11 +285,13 @@ export class MotionEngine {
   /**
    * 2 = two players share the camera: P1 in the left half, P2 in the right half,
    * each with their own tracker. Two trackers cost about twice the inference time.
+   * The camera switches to its whole (16:9) width for them and back afterwards.
    */
   setPlayers(players: 1 | 2): void {
     if (players === this.players) return;
     this.players = players;
     this.backend?.setSplit(players === 2);
+    void this.camera.setWide(players === 2);
     this.frame.players = players === 2 ? [null, null] : [];
     this.frame.displayPlayers = players === 2 ? [null, null] : [];
     this.frame.twoPlayer = players === 2 ? 'loading' : 'off';
@@ -431,7 +447,19 @@ export class MotionEngine {
     const f = this.frame;
     f.videoWidth = video.videoWidth;
     f.videoHeight = video.videoHeight;
-    f.aspect = video.videoWidth / video.videoHeight;
+    const aspect = video.videoWidth / video.videoHeight;
+    if (Math.abs(aspect - f.aspect) > 0.02) {
+      // The picture changed width (wide two-player mode, or a camera that did not
+      // return to its old mode): smoothed positions are stale.
+      this.smoother.reset();
+      this.primaryCenter = null;
+    }
+    f.aspect = aspect;
+    // …and the baseline must keep meaning the same spot in the room.
+    if (f.baseline && this.baselineAspect > 0 && Math.abs(f.aspect - this.baselineAspect) > 0.02) {
+      shiftBaseline(f.baseline, (f.aspect - this.baselineAspect) / 2);
+      this.baselineAspect = f.aspect;
+    }
     f.stats.inferenceMs = this.avgInferenceMs;
     f.stats.inferenceFps = this.inferenceMeter.rate;
     f.stats.targetInferenceFps = this.targetFps;

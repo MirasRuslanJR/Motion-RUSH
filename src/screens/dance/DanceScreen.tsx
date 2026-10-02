@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { CameraViewport } from '../../components/CameraViewport';
 import { HoldGesture } from '../../components/HoldGesture';
 import { Icon } from '../../components/Icon';
@@ -17,9 +17,11 @@ import {
 } from '../../features/dance/dance';
 import { DanceMusic } from '../../features/dance/music';
 import type { MotionEngine, MotionFrame } from '../../features/engine/MotionEngine';
+import { extractGeometry } from '../../features/gestures/FeatureExtractor';
 import { randomSeed, type GameModeDef } from '../../features/modes/modes';
 import { DanceRenderer, PLAYER_COLORS } from '../../features/render/DanceRenderer';
 import type { Pose } from '../../features/tracking/landmarks';
+import { StandGuide, STAND_ROOM_SW } from '../../features/versus/standZone';
 import { useEngineFrame } from '../../hooks/useEngine';
 import { clamp } from '../../lib/math/geometry';
 import type { Profile, RecordedSession } from '../../lib/storage';
@@ -73,6 +75,10 @@ function strongestAndWeakest(d: DancerState): { best: string | null; worst: stri
 
 interface Hud {
   visible: boolean[];
+  /** Two players before the music: "готов ✓", "не вижу" or where to move. */
+  statuses: string[];
+  /** Both dancers stand in their zones (or the single dancer is seen). */
+  ready: boolean[];
   loading: boolean;
   scores: number[];
   combos: number[];
@@ -93,6 +99,8 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
   const stageRef = useRef<Stage>('waiting');
   const [hud, setHud] = useState<Hud>(() => ({
     visible: Array.from({ length: players }, () => false),
+    statuses: Array.from({ length: players }, () => 'не вижу'),
+    ready: Array.from({ length: players }, () => false),
     loading: players === 2,
     scores: Array.from({ length: players }, () => 0),
     combos: Array.from({ length: players }, () => 0),
@@ -103,6 +111,9 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
   const hudRef = useRef(hud);
   const [recorded, setRecorded] = useState<RecordedSession | null>(null);
   const [result, setResult] = useState<DanceRunResult | null>(null);
+  // Two dancers: each needs a spot in their half with room to stretch the arms out.
+  const [guides] = useState(() => (players === 2 ? [new StandGuide(0, STAND_ROOM_SW.dance), new StandGuide(1, STAND_ROOM_SW.dance)] : []));
+  const standZones = useCallback(() => (stageRef.current === 'waiting' ? guides.map((g) => g.zone) : []), [guides]);
 
   useEffect(() => {
     engine.setExpected(null);
@@ -124,7 +135,13 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
     let songTime = -1;
 
     if (stageRef.current === 'waiting') {
-      const allVisible = poses.every((p) => p !== null);
+      if (frame.inferred) {
+        guides.forEach((g, i) => {
+          const pose = poses[i];
+          g.update(pose ? extractGeometry(pose) : null, frame.aspect);
+        });
+      }
+      const allVisible = poses.every((p) => p !== null) && guides.every((g) => g.placement === 'ok');
       visibleSince.current = allVisible ? (visibleSince.current ?? now) : null;
       if (visibleSince.current !== null && now - visibleSince.current > 800) {
         stageRef.current = 'playing';
@@ -168,6 +185,8 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
     const introBeat = Math.floor(songTime / BEAT_MS);
     const next: Hud = {
       visible: poses.map((p) => p !== null),
+      statuses: poses.map((p, i) => (!p ? 'не вижу' : (guides[i]?.message ?? 'готов ✓'))),
+      ready: poses.map((p, i) => p !== null && (guides[i]?.placement ?? 'ok') === 'ok'),
       loading: players === 2 && frame.twoPlayer === 'loading',
       scores: dance.dancers.map((d) => d.score),
       combos: dance.dancers.map((d) => d.combo),
@@ -181,6 +200,7 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
       next.countdown !== prev.countdown ||
       next.loading !== prev.loading ||
       next.visible.some((v, i) => v !== prev.visible[i]) ||
+      next.statuses.some((v, i) => v !== prev.statuses[i]) ||
       next.scores.some((v, i) => v !== prev.scores[i]) ||
       next.combos.some((v, i) => v !== prev.combos[i]) ||
       next.hints.some((v, i) => v !== prev.hints[i]);
@@ -237,15 +257,17 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
           {stage === 'waiting' && (
             <motion.div key="wait" className="overlay dance__overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <p className="t-label">{mode.title}</p>
-              <h2 className="t-headline">{players === 2 ? 'Встаньте вдвоём: один слева, другой справа' : 'Встань в кадр — музыка начнётся сама'}</h2>
+              <h2 className="t-headline">
+                {players === 2 ? 'Встаньте вдвоём — каждый в свою подсвеченную зону' : 'Встань в кадр — музыка начнётся сама'}
+              </h2>
               {players === 2 && (
                 <div className="dance__who">
                   {hud.loading ? (
                     <span className="dance__who-loading">Включаем распознавание для двоих…</span>
                   ) : (
-                    hud.visible.map((v, i) => (
-                      <span key={i} className={v ? 'dance__who-chip is-on' : 'dance__who-chip'} style={{ '--pc': PLAYER_COLORS[i] } as CSSProperties}>
-                        Игрок {i + 1}: {v ? 'вижу ✓' : 'не вижу'}
+                    hud.statuses.map((s, i) => (
+                      <span key={i} className={hud.ready[i] ? 'dance__who-chip is-on' : 'dance__who-chip'} style={{ '--pc': PLAYER_COLORS[i] } as CSSProperties}>
+                        Игрок {i + 1}: {s}
                       </span>
                     ))
                   )}
@@ -314,7 +336,7 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
 
       <aside className="dance__side">
         <div className={players === 2 ? 'dance__cam-wrap is-split' : 'dance__cam-wrap'}>
-          <CameraViewport engine={engine} variant="panel" hud={false} className="dance__camera" />
+          <CameraViewport engine={engine} variant="panel" hud={false} standZones={players === 2 ? standZones : undefined} className="dance__camera" />
           {players === 2 && (
             <>
               <span className="dance__cam-label dance__cam-label--p1">P1</span>
@@ -324,7 +346,7 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
         </div>
         <p className="dance__tip">
           {players === 2
-            ? 'Игрок 1 — левая половина кадра, игрок 2 — правая. Оба должны быть видны по пояс.'
+            ? 'Игрок 1 — слева, игрок 2 — справа, оба видны по пояс. В подсвеченной зоне хватает места развести руки в стороны; если игра просит отойти — шагните назад.'
             : 'Танцуй руками: вверх, в стороны, по диагонали. Ноги двигай как хочешь — это танцпол!'}
         </p>
       </aside>

@@ -30,10 +30,10 @@
   min-height: 0;
 }
 
-/* Keep the camera at its native 4:3 so leaning never crops the player out of view. */
+/* Keep the camera at its native shape so moving sideways never crops the player out of view. */
 .game__camera {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: var(--video-aspect, 4 / 3);
   flex: none;
 }
 

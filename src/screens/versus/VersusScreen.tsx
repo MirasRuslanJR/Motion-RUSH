@@ -136,12 +136,12 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
 
   useEngineFrame(engine, (frame, dt) => {
     if (frame.videoWidth === 0) return;
-    trackers.current ??= [new PlayerTracker(0, frame.aspect), new PlayerTracker(1, frame.aspect)];
+    trackers.current ??= [new PlayerTracker(0), new PlayerTracker(1)];
     const ts = trackers.current;
     const now = frame.time;
     // ?debug=1: inspect both players' pipelines from the console.
     if (DEBUG) (window as unknown as { __versus?: unknown }).__versus = { trackers: ts, games, frame };
-    if (frame.inferred) ts.forEach((t, i) => t.update(frame.players[i] ?? null, now));
+    if (frame.inferred) ts.forEach((t, i) => t.update(frame.players[i] ?? null, now, frame.aspect));
     if (stageRef.current === 'setup' && ts.every((t) => t.baseline)) {
       stageRef.current = 'play';
       setStage('play');

@@ -33,6 +33,8 @@ let shared = false;
 const cropCanvases: OffscreenCanvas[] = [];
 /** What the main tracker currently looks at; a change resets its tracked region. */
 let coreGeometry: 'full' | 'crop' = 'full';
+/** Size of the last camera frame; a new size (wide two-player mode) resets both trackers. */
+let frameSize: { width: number; height: number } | null = null;
 /** Trackers rebuilding their graph to forget the tracked region; they skip frames meanwhile (a few ms). */
 const resetting = new Set<LandmarkerCore>();
 const lastRelock = new Map<LandmarkerCore, number>();
@@ -167,6 +169,14 @@ function detect(message: Extract<WorkerRequest, { type: 'frame' }>): void {
       coreGeometry = geometry;
       resetTracker(core);
     }
+    const width = 'displayWidth' in frame ? frame.displayWidth : frame.width;
+    const height = 'displayHeight' in frame ? frame.displayHeight : frame.height;
+    if (frameSize && (frameSize.width !== width || frameSize.height !== height)) {
+      // The tracked regions belong to the old picture.
+      if (core) resetTracker(core);
+      if (second) resetTracker(second);
+    }
+    frameSize = { width, height };
     if (state === 'split' && core && second) {
       const result = detectSplit(frame, timestamp, [core, second]);
       if (result) {

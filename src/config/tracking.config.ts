@@ -24,7 +24,16 @@ export const TRACKING_CONFIG = {
   minPosePresenceConfidence: 0.6,
   minTrackingConfidence: 0.6,
 
-  camera: { idealWidth: 640, idealHeight: 480, idealFps: 30 },
+  camera: {
+    idealWidth: 640,
+    idealHeight: 480,
+    idealFps: 30,
+    /**
+     * Two-player modes ask for a 16:9 picture: laptop cameras are mostly 16:9,
+     * and a 640×480 request makes the browser cut a quarter of the width off.
+     */
+    wide: { idealWidth: 960, idealHeight: 540 },
+  },
 
   inference: {
     /** Upper bound for pose inference rate. Rendering always runs at display rate. */

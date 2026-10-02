@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import type { MotionEngine } from '../features/engine/MotionEngine';
 import { motionMeta } from '../features/gestures/types';
 import { CameraOverlayRenderer } from '../features/render/CameraOverlayRenderer';
-import type { StandZone } from '../features/versus/PlayerTracker';
+import type { StandZone } from '../features/versus/standZone';
 import { useEngineFrame, useMotionUi } from '../hooks/useEngine';
 import { Icon } from './Icon';
 import './CameraViewport.css';
@@ -35,6 +35,8 @@ export function CameraViewport({
   children,
   className,
 }: CameraViewportProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const shownAspect = useRef(0);
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<CameraOverlayRenderer | null>(null);
@@ -70,6 +72,12 @@ export function CameraViewport({
   }, []);
 
   useEngineFrame(engine, (frame, _dt) => {
+    // Panels and the picture-in-picture take the camera's own shape (16:9 for two players).
+    const root = rootRef.current;
+    if (root && frame.videoWidth > 0 && Math.abs(frame.aspect - shownAspect.current) > 0.005) {
+      shownAspect.current = frame.aspect;
+      root.style.setProperty('--video-aspect', frame.aspect.toFixed(4));
+    }
     rendererRef.current?.render(frame, frame.time, { guidance, trail, standZones: standZones?.() });
     // Tracking confidence text: throttled DOM write, no React render.
     if (hud && frame.time - lastHudUpdate.current > 150 && confidenceRef.current) {
@@ -83,7 +91,7 @@ export function CameraViewport({
   const gestures = [lateral, vertical].filter((g) => g !== null);
 
   return (
-    <div className={`viewport viewport--${variant} ${tracked ? 'is-tracked' : ''} ${className ?? ''}`}>
+    <div ref={rootRef} className={`viewport viewport--${variant} ${tracked ? 'is-tracked' : ''} ${className ?? ''}`}>
       <div ref={hostRef} className="viewport__media">
         <canvas ref={canvasRef} className="viewport__overlay" aria-hidden="true" />
       </div>
