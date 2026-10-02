@@ -108,6 +108,19 @@ export class LandmarkerCore {
     return this.currentDelegate;
   }
 
+  /**
+   * Forget the tracked region. Needed when the input geometry changes (full
+   * frame ↔ one player's crop): the previous region would point at the wrong
+   * part of the new image. Re-applying the options rebuilds the graph.
+   */
+  async resetTracking(): Promise<void> {
+    try {
+      await this.landmarker.setOptions({ numPoses: this.numPoses });
+    } catch {
+      // Keep going: the tracker re-detects by itself once the old region fails.
+    }
+  }
+
   /** 1 = single player (fast), 2 = two players in front of one camera. */
   async setNumPoses(numPoses: number): Promise<void> {
     if (numPoses === this.numPoses) return;

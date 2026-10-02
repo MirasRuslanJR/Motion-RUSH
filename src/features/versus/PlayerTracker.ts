@@ -15,6 +15,15 @@ const HOLD_MS = 320;
 
 /** Two people side by side rarely stand perfectly still: a shorter, more tolerant capture. */
 const QUICK_CALIBRATION = { ...GESTURE_CONFIG.calibration, durationMs: 1400, maxDriftSW: 0.24 };
+/**
+ * Lanes for two players are measured from where each player stood at
+ * calibration (±this many shoulder widths), not from the halves of the
+ * picture — so changing lane is one short step from your own spot and never
+ * means walking over to the other player.
+ */
+const LANE_HALF_SW = 2;
+/** Each player must stand at least this far (shoulder widths) from the middle line. */
+const MIN_GAP_SW = 1.4;
 
 function toInput(d: Diagnosis | null): DiagnosisInput | null {
   return d ? { expected: d.expected, verdict: d.verdict, ruleId: d.ruleId, message: d.message } : null;
@@ -23,10 +32,15 @@ function toInput(d: Diagnosis | null): DiagnosisInput | null {
 /**
  * One player's own recognition pipeline for local two-player games:
  * smoothing → quick calibration → features → classifier → state machines →
- * error-mode diagnosis. The play area (lanes) is this player's half of the picture.
+ * error-mode diagnosis. Lanes are a short step left / right of the spot the
+ * player calibrated on.
  */
 export class PlayerTracker {
-  readonly region: { x0: number; x1: number };
+  /** 0 = player 1 (left half of the mirrored picture), 1 = player 2. */
+  readonly side: 0 | 1;
+  private readonly middle: number;
+  /** Standing too close to the middle line — calibration waits. */
+  tooCloseToMiddle = false;
   baseline: Baseline | null = null;
   pose: Pose | null = null;
   features: BodyFeatures | null = null;
@@ -45,8 +59,9 @@ export class PlayerTracker {
   private lastSeen = Number.NEGATIVE_INFINITY;
   private lastUpdate = 0;
 
-  constructor(region: { x0: number; x1: number }) {
-    this.region = region;
+  constructor(side: 0 | 1, aspect: number) {
+    this.side = side;
+    this.middle = aspect / 2;
   }
 
   get trackable(): boolean {
@@ -78,8 +93,22 @@ export class PlayerTracker {
     }
     const pose = this.pose;
     if (!this.baseline) {
-      this.calibration = this.calibrator.push(pose ? extractGeometry(pose) : null, pose !== null, now);
-      if (this.calibration.done && this.calibrator.baseline) this.baseline = { ...this.calibrator.baseline, region: this.region };
+      const geometry = pose ? extractGeometry(pose) : null;
+      // Too close to the middle: a lane step would cross into the other player's half.
+      const spot = geometry ? (geometry.hipCenter ?? geometry.shoulderCenter).x : null;
+      this.tooCloseToMiddle = geometry !== null && spot !== null && Math.abs(spot - this.middle) < MIN_GAP_SW * geometry.shoulderWidth;
+      if (this.tooCloseToMiddle) {
+        this.calibrator.reset();
+        this.calibration = { progress: 0, issue: null, done: false };
+        return;
+      }
+      this.calibration = this.calibrator.push(geometry, pose !== null, now);
+      const captured = this.calibrator.baseline;
+      if (this.calibration.done && captured) {
+        const x = (captured.hipCenter ?? captured.shoulderCenter).x;
+        const half = LANE_HALF_SW * captured.scale;
+        this.baseline = { ...captured, region: { x0: x - half, x1: x + half } };
+      }
       return;
     }
     if (!pose) {
@@ -119,6 +148,7 @@ export class PlayerTracker {
   get setupStatus(): string {
     if (this.baseline) return 'Готов!';
     if (!this.pose) return 'Не вижу — встань в свою половину';
+    if (this.tooCloseToMiddle) return 'Отойди на шаг от середины';
     switch (this.calibration.issue) {
       case 'ARMS_UP':
         return 'Опусти руки';

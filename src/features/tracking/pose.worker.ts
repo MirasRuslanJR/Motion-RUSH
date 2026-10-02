@@ -31,6 +31,15 @@ let splitWanted = false;
 /** The second tracker could not be created: one tracker looks for two people. */
 let shared = false;
 const cropCanvases: OffscreenCanvas[] = [];
+/** What the main tracker currently looks at; a change resets its tracked region. */
+let coreGeometry: 'full' | 'crop' = 'full';
+/** Trackers rebuilding their graph to forget the tracked region; they skip frames meanwhile (a few ms). */
+const resetting = new Set<LandmarkerCore>();
+const lastRelock = new Map<LandmarkerCore, number>();
+/** A crop tracker stuck on the wrong person looks again at most this often. */
+const RELOCK_MS = 1500;
+/** Crops are scaled down to this height: the model works at 256 px anyway, and it halves the image cost. */
+const MAX_CROP_HEIGHT = 360;
 
 async function init(message: InitMessage): Promise<void> {
   initMessage = message;
@@ -78,6 +87,12 @@ function splitState(): TwoPlayerTracking {
   return shared ? 'shared' : 'loading';
 }
 
+function resetTracker(tracker: LandmarkerCore): void {
+  if (resetting.has(tracker)) return;
+  resetting.add(tracker);
+  void tracker.resetTracking().finally(() => resetting.delete(tracker));
+}
+
 function cropCanvas(slot: number, width: number, height: number): OffscreenCanvas {
   let canvas = cropCanvases[slot];
   if (!canvas) {
@@ -100,11 +115,12 @@ function detectSplit(frame: Frame, timestamp: number, trackers: readonly Landmar
   for (let slot = 0; slot < 2; slot++) {
     const crop = crops[slot];
     const tracker = trackers[slot];
-    if (!crop || !tracker) continue;
-    const canvas = cropCanvas(slot, crop.width, height);
+    if (!crop || !tracker || resetting.has(tracker)) continue;
+    const k = Math.min(1, MAX_CROP_HEIGHT / height);
+    const canvas = cropCanvas(slot, Math.round(crop.width * k), Math.round(height * k));
     const ctx = canvas.getContext('2d');
     if (!ctx) continue;
-    ctx.drawImage(frame, crop.x0, 0, crop.width, height, 0, 0, crop.width, height);
+    ctx.drawImage(frame, crop.x0, 0, crop.width, height, 0, 0, canvas.width, canvas.height);
     const result = tracker.detect(canvas, timestamp);
     if (result === null) continue;
     answered = true;
@@ -116,6 +132,16 @@ function detectSplit(frame: Frame, timestamp: number, trackers: readonly Landmar
   }
   if (!answered) return null;
   const [p1, p2] = assignSides(found[0] ?? null, found[1] ?? null);
+  // A rejected result (the other player, or one person seen by both crops) means that
+  // tracker is locked on the wrong person and would never find its own player: look again.
+  const now = performance.now();
+  [p1, p2].forEach((kept, slot) => {
+    const tracker = trackers[slot];
+    if (!tracker || !found[slot] || kept) return;
+    if (now - (lastRelock.get(tracker) ?? Number.NEGATIVE_INFINITY) < RELOCK_MS) return;
+    lastRelock.set(tracker, now);
+    resetTracker(tracker);
+  });
   const poses: RawLandmark[][] = [];
   const slots: number[] = [];
   if (p1) {
@@ -136,13 +162,18 @@ function detect(message: Extract<WorkerRequest, { type: 'frame' }>): void {
     const state = splitState();
     let poses: readonly (readonly RawLandmark[])[] | null = null;
     let slots: number[] | undefined;
+    const geometry = state === 'split' && second ? 'crop' : 'full';
+    if (core && geometry !== coreGeometry) {
+      coreGeometry = geometry;
+      resetTracker(core);
+    }
     if (state === 'split' && core && second) {
       const result = detectSplit(frame, timestamp, [core, second]);
       if (result) {
         poses = result.poses;
         slots = result.slots;
       }
-    } else if (core) {
+    } else if (core && !resetting.has(core)) {
       poses = core.detect(frame, timestamp);
     }
     const inferenceMs = performance.now() - started;

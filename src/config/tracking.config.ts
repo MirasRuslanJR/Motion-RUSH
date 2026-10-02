@@ -16,8 +16,13 @@ export const TRACKING_CONFIG = {
    */
   numPoses: 1,
   minPoseDetectionConfidence: 0.5,
-  minPosePresenceConfidence: 0.5,
-  minTrackingConfidence: 0.5,
+  /**
+   * Stricter than MediaPipe's 0.5 defaults: after a fast move (a real jump, a
+   * quick step) a weak track is dropped and the person is detected afresh,
+   * instead of the skeleton sliding off the body.
+   */
+  minPosePresenceConfidence: 0.6,
+  minTrackingConfidence: 0.6,
 
   camera: { idealWidth: 640, idealHeight: 480, idealFps: 30 },
 

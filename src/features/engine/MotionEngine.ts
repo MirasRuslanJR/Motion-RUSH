@@ -71,6 +71,8 @@ export interface MotionFrame {
    * Empty in single-player mode.
    */
   players: (Pose | null)[];
+  /** The same players eased every display frame — for drawing only. */
+  displayPlayers: (Pose | null)[];
   /** How two-player tracking currently runs ('loading' while the second tracker starts). */
   twoPlayer: TwoPlayerTracking;
   /** Adaptive rendering quality for this frame (see QualityGovernor). */
@@ -98,6 +100,19 @@ const INITIAL_UI: MotionUiState = {
   vertical: null,
   hint: null,
 };
+
+/** Moves `display` the share `a` of the way to `target`; depth and visibility are taken as is. */
+function easePose(display: Pose, target: Pose, a: number): void {
+  for (let i = 0; i < target.length; i++) {
+    const t = target[i];
+    const d = display[i];
+    if (!t || !d) continue;
+    d.x += (t.x - d.x) * a;
+    d.y += (t.y - d.y) * a;
+    d.z = t.z;
+    d.v = t.v;
+  }
+}
 
 function summary(f: BodyFeatures | null): GestureEventFeatures | null {
   if (!f) return null;
@@ -163,6 +178,7 @@ export class MotionEngine {
   private disposed = false;
   private players = 1;
   private readonly peopleBuffers: Pose[] = [createPose(), createPose()];
+  private readonly displayPlayerBuffers: Pose[] = [createPose(), createPose()];
 
   constructor() {
     this.frame = {
@@ -184,6 +200,7 @@ export class MotionEngine {
       target: null,
       baseline: null,
       players: [],
+      displayPlayers: [],
       twoPlayer: 'off',
       render: this.quality.settings,
       renderLevel: this.quality.level,
@@ -260,6 +277,7 @@ export class MotionEngine {
     this.players = players;
     this.backend?.setSplit(players === 2);
     this.frame.players = players === 2 ? [null, null] : [];
+    this.frame.displayPlayers = players === 2 ? [null, null] : [];
     this.frame.twoPlayer = players === 2 ? 'loading' : 'off';
     this.ui.set({ multiplePeople: false });
   }
@@ -320,6 +338,7 @@ export class MotionEngine {
     this.frame.inferred = this.resultArrived;
     this.resultArrived = false;
     this.easeDisplayPose(dt);
+    this.easeDisplayPlayers(dt);
 
     this.frame.stats.fps = this.fpsMeter.rate;
     for (const listener of this.frameListeners) listener(this.frame, dt);
@@ -339,15 +358,27 @@ export class MotionEngine {
       f.displayPose = display;
       return;
     }
+    easePose(display, target, 1 - Math.exp(-dt / RENDER_CONFIG.displaySmoothingMs));
+  }
+
+  /**
+   * Two-player mode: the same glide for both skeletons. Two trackers halve the
+   * inference rate, and unsmoothed skeletons jumped visibly between results.
+   */
+  private easeDisplayPlayers(dt: number): void {
+    const f = this.frame;
     const a = 1 - Math.exp(-dt / RENDER_CONFIG.displaySmoothingMs);
-    for (let i = 0; i < target.length; i++) {
-      const t = target[i];
-      const d = display[i];
-      if (!t || !d) continue;
-      d.x += (t.x - d.x) * a;
-      d.y += (t.y - d.y) * a;
-      d.z = t.z;
-      d.v = t.v;
+    for (let i = 0; i < f.displayPlayers.length; i++) {
+      const target = f.players[i] ?? null;
+      const display = this.displayPlayerBuffers[i];
+      if (!target || !display) {
+        f.displayPlayers[i] = null;
+      } else if (!f.displayPlayers[i]) {
+        // (Re)appearing player: start where they are, never glide in from elsewhere.
+        f.displayPlayers[i] = copyPoseInto(target, display);
+      } else {
+        easePose(display, target, a);
+      }
     }
   }
 

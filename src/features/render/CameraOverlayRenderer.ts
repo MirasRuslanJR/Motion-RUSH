@@ -10,6 +10,12 @@ import { coverMapping, mapLen, mapX, mapY, observeCanvas, type ViewMapping } fro
 import { PALETTE, rgba } from './palette';
 import { drawArrow, drawSkeleton, MotionTrail, type Projector } from './skeletonRenderer';
 
+/** Standing play with lanes = parts of the picture, and the screen wants a lane change. */
+function isLaneMove(frame: Readonly<MotionFrame>): boolean {
+  const e = frame.expected;
+  return (e === 'LEAN_LEFT' || e === 'LEAN_RIGHT' || e === 'CENTER') && frame.baseline?.mode === 'full' && frame.baseline.region !== undefined;
+}
+
 /** P1 / P2 colours (the same as on the game screens). */
 const PLAYER_TINTS = [PALETTE.cyan, PALETTE.warn] as const;
 
@@ -109,14 +115,17 @@ export class CameraOverlayRenderer {
     this.mapping = coverMapping(width, height, frame.videoWidth, frame.videoHeight);
     const success = diagnosis?.verdict === 'correct';
     this.updateJointSets(frame, opts.guidance);
-    if (opts.guidance) this.drawLaneZones(ctx, frame, width, height);
+    // Standing play: a lane change is shown as "go to this zone" — a whole ghost skeleton
+    // half a picture away from the player looked like the tracking had come off the body.
+    const laneMove = isLaneMove(frame);
+    if (opts.guidance) this.drawLaneZones(ctx, frame, pose, width, height, now, laneMove && !success);
 
     if (opts.trail) {
       this.trail.push(pose, this.projector);
       this.trail.draw(ctx, success ? PALETTE.success : PALETTE.cyan, Math.max(2, this.projector.len(0.006)), 1, frame.render.trailLength);
     }
 
-    if (opts.guidance && diagnosis && frame.baseline && frame.expected && !success) {
+    if (opts.guidance && diagnosis && frame.baseline && frame.expected && !success && !laneMove) {
       this.drawGuides(ctx, frame, pose, width, height);
       if (frame.target) {
         drawSkeleton(ctx, frame.target, this.projector, { tone: 'ghost', alpha: 0.9 });
@@ -137,7 +146,15 @@ export class CameraOverlayRenderer {
    * Standing play: lanes are parts of the picture. Shows the three zones and
    * lights the one the player is in, so moving between lanes is obvious.
    */
-  private drawLaneZones(ctx: CanvasRenderingContext2D, frame: Readonly<MotionFrame>, width: number, height: number): void {
+  private drawLaneZones(
+    ctx: CanvasRenderingContext2D,
+    frame: Readonly<MotionFrame>,
+    pose: Pose,
+    width: number,
+    height: number,
+    now: number,
+    showTarget: boolean,
+  ): void {
     const baseline = frame.baseline;
     const region = baseline?.region;
     if (!baseline || baseline.mode !== 'full' || !region) return;
@@ -177,6 +194,27 @@ export class CameraOverlayRenderer {
       ctx.lineTo(x, height);
       ctx.stroke();
     }
+    ctx.setLineDash([]);
+    // Where to go: the target zone pulses and an arrow leads there from the player.
+    const expected = frame.expected;
+    const target = expected === 'LEAN_LEFT' ? 0 : expected === 'LEAN_RIGHT' ? 2 : expected === 'CENTER' ? 1 : -1;
+    const zone = zones[target];
+    if (showTarget && zone && target !== active) {
+      const a = Math.max(0, Math.min(zone[0], zone[1]));
+      const b = Math.min(width, Math.max(zone[0], zone[1]));
+      ctx.globalAlpha = 0.1 + 0.08 * (0.5 + 0.5 * Math.sin(now / 160));
+      ctx.fillStyle = PALETTE.warn;
+      ctx.fillRect(a, 0, b - a, height);
+      ctx.globalAlpha = 0.95;
+      ctx.fillStyle = PALETTE.warn;
+      ctx.font = '800 14px Manrope, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('ИДИ СЮДА', (a + b) / 2, Math.max(70, height * 0.2) + 20);
+      // From the chest (always in the picture) toward the zone to step into.
+      const chest = midpoint(lm(pose, LM.LEFT_SHOULDER), lm(pose, LM.RIGHT_SHOULDER));
+      const from = { x: this.projector.x(chest.x), y: this.projector.y(chest.y) + this.projector.len(0.05) };
+      drawArrow(ctx, from, { x: (a + b) / 2, y: from.y }, PALETTE.warn, Math.max(12, this.projector.len(0.035)), 0.95);
+    }
     ctx.restore();
   }
 
@@ -212,7 +250,7 @@ export class CameraOverlayRenderer {
     ctx.lineTo(mid, height);
     ctx.stroke();
     ctx.restore();
-    frame.players.forEach((pose, i) => {
+    frame.displayPlayers.forEach((pose, i) => {
       if (pose) drawSkeleton(ctx, pose, this.projector, { tone: 'tracking', tint: PLAYER_TINTS[i], glow: frame.render.glow });
     });
   }

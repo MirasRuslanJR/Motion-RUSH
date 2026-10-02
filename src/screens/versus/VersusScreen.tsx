@@ -130,8 +130,7 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
 
   useEngineFrame(engine, (frame, dt) => {
     if (frame.videoWidth === 0) return;
-    const half = frame.aspect / 2;
-    trackers.current ??= [new PlayerTracker({ x0: 0, x1: half }), new PlayerTracker({ x0: half, x1: frame.aspect })];
+    trackers.current ??= [new PlayerTracker(0, frame.aspect), new PlayerTracker(1, frame.aspect)];
     const ts = trackers.current;
     const now = frame.time;
     // ?debug=1: inspect both players' pipelines from the console.
@@ -308,8 +307,8 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
               </div>
             )}
             <p className="overlay__message">
-              Отойдите на 2–3 шага, чтобы камера видела вас целиком, и постойте ровно секунду. Каждый управляет своим бегуном: перебегай
-              между полосами в своей половине, прыгай и приседай.
+              Отойдите на 2–3 шага, чтобы камера видела вас целиком, и постойте ровно секунду. Полоса меняется одним шагом влево или
+              вправо от своего места — идти к соседу не нужно. Прыжок и присед — как в обычной игре.
             </p>
           </motion.div>
         )}
