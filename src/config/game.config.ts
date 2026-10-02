@@ -141,6 +141,19 @@ export const COURSES = {
       { untilMs: 60000, gapMs: [1550, 1750], leadMs: 1750, kinds: ['GATE_LEFT', 'GATE_RIGHT', 'GATE_CENTER'], orbChance: 0.45 },
     ],
   },
+  /**
+   * Two players at one camera: calmer and steadier. Two trackers run at about
+   * half the single-player rate, and both players also watch each other.
+   */
+  duo: {
+    ...GAME_CONFIG.course,
+    crossoverPenaltyMs: 600,
+    phases: [
+      { untilMs: 22000, gapMs: [2700, 3000], leadMs: 2700, kinds: BASIC, orbChance: 0.35 },
+      { untilMs: 46000, gapMs: [2350, 2650], leadMs: 2450, kinds: BASIC, orbChance: 0.35 },
+      { untilMs: 66000, gapMs: [2100, 2350], leadMs: 2250, kinds: ALL, orbChance: 0.3 },
+    ],
+  },
   /** Slow and forgiving — for learning the moves. */
   practice: {
     ...GAME_CONFIG.course,

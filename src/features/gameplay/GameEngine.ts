@@ -56,6 +56,11 @@ export interface GameRules {
   energy: number;
   /** Practice: misses never cost energy. */
   practice: boolean;
+  /**
+   * Wider timing windows (two players: recognition with two trackers is slower,
+   * so a move registers later). Defaults come from GAME_CONFIG.
+   */
+  timing?: { airtimeMs?: number; clearGraceMs?: number; duckGraceMs?: number };
 }
 
 const DEFAULT_RULES: GameRules = { mode: 'classic', scheme: 'seated', energy: GAME_CONFIG.energy, practice: false };
@@ -135,10 +140,18 @@ export class GameEngine {
   shield = false;
   /** Double points until this game time. */
   boostUntil = Number.NEGATIVE_INFINITY;
+  /** How long one jump keeps the runner in the air. */
+  readonly airtimeMs: number;
+  private readonly clearGraceMs: number;
+  private readonly duckGraceMs: number;
 
   constructor(course: CourseItem[] = generateCourse(), cfg: GameConfig = GAME_CONFIG, rules: Partial<GameRules> = {}) {
     this.cfg = cfg;
     this.rules = { ...DEFAULT_RULES, ...rules };
+    const timing = this.rules.timing ?? {};
+    this.airtimeMs = timing.airtimeMs ?? cfg.airtimeMs;
+    this.clearGraceMs = timing.clearGraceMs ?? cfg.clearGraceMs;
+    this.duckGraceMs = timing.duckGraceMs ?? cfg.duckGraceMs;
     this.course = course;
     this.duration = courseDuration(course, cfg.course);
     this.energy = this.rules.energy;
@@ -278,7 +291,7 @@ export class GameEngine {
     // Player state (edges count as detected gestures).
     // A jump is one take-off with a fixed flight time: holding the pose (arms up, staying
     // on tiptoe) does NOT keep the runner in the air, and a new jump needs a landing first.
-    const landed = t - this.jumpStartedAt > this.cfg.airtimeMs;
+    const landed = t - this.jumpStartedAt > this.airtimeMs;
     if (input.jumpHeld && !this.prevJumpHeld && landed) {
       this.jumpStartedAt = t;
       this.gesturesDetected++;
@@ -290,8 +303,8 @@ export class GameEngine {
     this.prevJumpHeld = input.jumpHeld;
     this.prevCrouchHeld = input.crouchHeld;
     this.lane = input.lane;
-    this.airborne = t - this.jumpStartedAt <= this.cfg.airtimeMs;
-    this.ducking = input.crouchHeld || t - this.lastCrouchEndAt <= this.cfg.duckGraceMs;
+    this.airborne = t - this.jumpStartedAt <= this.airtimeMs;
+    this.ducking = input.crouchHeld || t - this.lastCrouchEndAt <= this.duckGraceMs;
 
     this.updateOrbs(t, events);
     this.updateObstacles(t, input, events);
@@ -376,7 +389,7 @@ export class GameEngine {
     if (ok) {
       const perfect = (a.satisfiedSince ?? t) <= a.item.arriveAt - this.cfg.perfectLeadMs;
       this.resolveClear(a, perfect ? 'perfect' : 'good', events);
-    } else if (t > a.item.arriveAt + this.cfg.clearGraceMs) {
+    } else if (t > a.item.arriveAt + this.clearGraceMs) {
       this.resolveMiss(a, events);
     }
   }

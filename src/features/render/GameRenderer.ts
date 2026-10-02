@@ -1,4 +1,3 @@
-import { GAME_CONFIG } from '../../config/game.config';
 import { clamp, lerp, midpoint, type Point } from '../../lib/math/geometry';
 import type { MotionFrame } from '../engine/MotionEngine';
 import type { GameEngine, GameEvent } from '../gameplay/GameEngine';
@@ -226,7 +225,7 @@ export class GameRenderer {
     const k = (tau: number) => 1 - Math.exp(-dtMs / tau);
     this.laneVisual = lerp(this.laneVisual, game.lane, k(75));
     // A real arc over the jump's fixed airtime — up, hang, down — then a landing puff.
-    const airT = (game.time - game.jumpStartedAt) / GAME_CONFIG.airtimeMs;
+    const airT = (game.time - game.jumpStartedAt) / game.airtimeMs;
     const inAir = airT >= 0 && airT < 1;
     this.jumpVisual = inAir ? Math.sin(Math.PI * airT) : lerp(this.jumpVisual, 0, k(50));
     if (this.wasAirborne && !inAir) {

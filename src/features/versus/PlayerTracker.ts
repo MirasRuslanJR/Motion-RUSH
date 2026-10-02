@@ -26,6 +26,14 @@ const QUICK_CALIBRATION = { ...GESTURE_CONFIG.calibration, durationMs: 1400, max
 const LANE_HALF_SW = 1.3;
 /** The picture changed shape after calibration (camera switched to wide): calibrate again. */
 const ASPECT_CHANGE = 0.02;
+/**
+ * Two trackers run at about 5 frames a second, so a short hop is seen in one
+ * frame at most. The single-player filter would cut that one frame's rise by a
+ * third; this lighter one keeps ~87% of it…
+ */
+const DUO_SMOOTHING = { minCutoff: 5, beta: 3, dCutoff: 1 };
+/** …and the rise counts a little more (the jump threshold becomes ~0.15 SW instead of 0.2). */
+const JUMP_GAIN = 1.35;
 
 function laneRegion(x: number, sw: number): { x0: number; x1: number } {
   return { x0: x - LANE_HALF_SW * sw, x1: x + LANE_HALF_SW * sw };
@@ -56,7 +64,7 @@ export class PlayerTracker {
   private calibratedAspect = 0;
   private expected: ExpectedMotion | null = null;
   private readonly hints = new HintScheduler();
-  private readonly smoother = new MotionSmoother();
+  private readonly smoother = new MotionSmoother(DUO_SMOOTHING);
   private readonly calibrator = new Calibrator(QUICK_CALIBRATION);
   private readonly lateral = new GestureStateMachine('lateral');
   private readonly vertical = new GestureStateMachine('vertical');
@@ -137,6 +145,7 @@ export class PlayerTracker {
       return;
     }
     const features = extractFeatures(pose, this.baseline);
+    features.bodyRise *= JUMP_GAIN;
     this.features = features;
     const c = classify(features, this.baseline.mode);
     const feats = { leanX: features.leanX, crouchDepth: features.crouchDepth, leftHandLift: features.leftHandLift, rightHandLift: features.rightHandLift };

@@ -92,6 +92,28 @@ describe('two-player tracker', () => {
     expect(p1.baseline).toBeNull();
   });
 
+  it('a short hop seen in one frame at 5 frames a second still counts', () => {
+    const p1 = new PlayerTracker(0);
+    let now = feed(p1, {}, 0, 70);
+    // Two trackers: about 5 results a second, so the hop shows up in exactly one of them.
+    const at5fps = (params: Partial<SyntheticPoseParams>) => {
+      now += 200;
+      p1.update(buildSyntheticPose({ cx: 0.3, cy: 0.35, sw: SW, ...params }), now, ASPECT);
+    };
+    at5fps({});
+    at5fps({});
+    p1.jumped = false;
+    // Bouncing a little is not a jump…
+    at5fps({ rise: 0.08 });
+    at5fps({});
+    expect(p1.jumped).toBe(false);
+    // …a real, if short, hop is.
+    at5fps({});
+    at5fps({ rise: 0.2 });
+    at5fps({});
+    expect(p1.jumped).toBe(true);
+  });
+
   it('calibrates again when the picture changes shape (camera switched to wide)', () => {
     const p1 = new PlayerTracker(0);
     let now = feed(p1, {}, 0, 70);

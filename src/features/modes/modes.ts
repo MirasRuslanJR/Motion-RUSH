@@ -72,9 +72,18 @@ export interface GameModeDef {
   online: boolean;
   /** Label for the progress bar area. */
   goal: string;
+  /** Wider timing windows for this mode (see GameRules.timing). */
+  timing?: GameRules['timing'];
 }
 
-const RUNNER = { kind: 'runner', players: 1, practice: false, seed: 'random', ranked: true, online: false } as const;
+/**
+ * Two players at one camera: each tracker sees ~5 frames a second, so a move
+ * registers 0.3–0.5 s later than in single play. The windows grow by about
+ * that much: a longer flight and more time to be in place after arrival.
+ */
+const DUO_TIMING: GameRules['timing'] = { airtimeMs: 900, clearGraceMs: 450, duckGraceMs: 320 };
+
+const RUNNER ={ kind: 'runner', players: 1, practice: false, seed: 'random', ranked: true, online: false } as const;
 
 const ALL_MODES: readonly GameModeDef[] = [
   {
@@ -130,10 +139,11 @@ const ALL_MODES: readonly GameModeDef[] = [
     badge: '2 ИГРОКА',
     tagline: 'Двое у одного ноутбука: у каждого своя трасса — кто наберёт больше',
     accent: '#2ee6ff',
-    course: 'standard',
+    course: 'duo',
     energy: GAME_CONFIG.energy,
     ranked: false,
     goal: 'Обгони друга',
+    timing: DUO_TIMING,
   },
   {
     ...RUNNER,
@@ -283,5 +293,5 @@ export function courseForMode(mode: GameModeDef, sharedSeed?: number): CourseIte
 }
 
 export function rulesForMode(mode: GameModeDef, scheme: ControlScheme): GameRules {
-  return { mode: mode.id, scheme, energy: mode.energy, practice: mode.practice };
+  return { mode: mode.id, scheme, energy: mode.energy, practice: mode.practice, timing: mode.timing };
 }

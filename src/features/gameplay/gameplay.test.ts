@@ -250,6 +250,34 @@ describe('game modes and power-ups', () => {
     expect(game.result().gesturesDetected).toBe(1);
   });
 
+  it('two players get a calmer course and wider timing windows', () => {
+    const versus = getMode('versus');
+    const required = courseForMode(versus).filter((c) => !isPickup(c.kind));
+    for (let i = 1; i < required.length; i++) {
+      expect((required[i]?.arriveAt ?? 0) - (required[i - 1]?.arriveAt ?? 0)).toBeGreaterThanOrEqual(2100);
+    }
+
+    // A jump that registers 300 ms after the barrier reached the runner (two trackers are slower)…
+    const late = (g: GameEngine): PlayerInput => {
+      const a = g.activeItem;
+      return { ...idle, jumpHeld: a !== null && g.time >= a.arriveAt + 300 && g.time < a.arriveAt + 350 };
+    };
+    // …and one 850 ms before it.
+    const early = (g: GameEngine): PlayerInput => {
+      const a = g.activeItem;
+      return { ...idle, jumpHeld: a !== null && g.time >= a.arriveAt - 850 && g.time < a.arriveAt - 800 };
+    };
+    for (const input of [late, early]) {
+      const solo = new GameEngine([item(0, 'HURDLE', 4000)]);
+      play(solo, input);
+      expect(solo.result().obstacles[0]?.result).toBe('miss');
+      const duo = new GameEngine([item(0, 'HURDLE', 4000)], undefined, rulesForMode(versus, 'body'));
+      play(duo, input);
+      expect(duo.result().obstacles[0]?.result).not.toBe('miss');
+      expect(duo.airtimeMs).toBeGreaterThan(solo.airtimeMs);
+    }
+  });
+
   it('the daily seed changes at midnight Astana time', () => {
     const morning = dailySeed(new Date('2026-09-30T03:00:00Z'));
     expect(dailySeed(new Date('2026-09-30T18:00:00Z'))).toBe(morning);
