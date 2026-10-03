@@ -3,18 +3,18 @@ import type { SessionResult } from '../features/gameplay/types';
 import { getMode, type GameModeId } from '../features/modes/modes';
 
 /**
- * The whole product is one scenario:
- * LANDING → PERMISSION → CHECK → CALIBRATION → TUTORIAL → MODES → GAME (countdown inside) → RESULTS → …
- * Online duels go MODES → LOBBY → GAME → RESULTS → LOBBY (rematch).
+ * The game opens on the main menu. Picking a mode for the first time sets the camera up
+ * (PERMISSION → CHECK → CALIBRATION → TUTORIAL the first time) and then starts that mode
+ * right away; after that a mode starts straight from the menu.
+ * Online duels go MENU → LOBBY → GAME → RESULTS → LOBBY (rematch).
  */
 export type Phase =
-  | 'landing'
+  | 'menu'
   | 'permission'
   | 'camera-error'
   | 'check'
   | 'calibration'
   | 'tutorial'
-  | 'modes'
   | 'lobby'
   | 'leaderboard'
   | 'game'
@@ -23,10 +23,16 @@ export type Phase =
   | 'arcade'
   | 'results';
 
+/** What the camera setup leads to: the chosen mode, the tutorial, or back to the menu. */
+export type AfterSetup = 'play' | 'tutorial' | 'menu';
+
 export interface FlowState {
   phase: Phase;
   errorKind: CameraErrorKind | null;
   tutorialDone: boolean;
+  /** The camera is set up and calibrated: modes start right away. */
+  ready: boolean;
+  after: AfterSetup;
   runId: number;
   mode: GameModeId;
   /** Course seed shared by an online room (duel mode). */
@@ -37,78 +43,95 @@ export interface FlowState {
 }
 
 export type FlowAction =
-  | { type: 'START' }
+  /** Play a mode from the menu; `cameraOn` = the camera is already running. */
+  | { type: 'PLAY'; mode: GameModeId; cameraOn: boolean }
+  | { type: 'TUTORIAL'; cameraOn: boolean }
+  | { type: 'RETRY' }
   | { type: 'CAMERA_READY' }
   | { type: 'CAMERA_FAILED'; kind: CameraErrorKind }
   | { type: 'CHECK_PASSED' }
   | { type: 'CALIBRATED' }
   | { type: 'TUTORIAL_DONE' }
-  | { type: 'SELECT_MODE'; mode: GameModeId }
   | { type: 'DUEL_START'; seed: number }
   | { type: 'GAME_OVER'; result: SessionResult }
   | { type: 'PLAY_AGAIN' }
-  | { type: 'MODES' }
+  | { type: 'MENU' }
   | { type: 'RECALIBRATE' }
   | { type: 'LEADERBOARD' }
-  | { type: 'BACK' }
-  | { type: 'EXIT' };
+  | { type: 'BACK' };
 
 export const INITIAL_FLOW: FlowState = {
-  phase: 'landing',
+  phase: 'menu',
   errorKind: null,
   tutorialDone: false,
+  ready: false,
+  after: 'menu',
   runId: 0,
   mode: 'classic',
   duelSeed: null,
   result: null,
-  back: 'landing',
+  back: 'menu',
 };
 
-const newRun = (state: FlowState, patch: Partial<FlowState> = {}): FlowState => ({
-  ...state,
-  ...patch,
-  phase: 'game',
-  runId: state.runId + 1,
-});
+/** The screen a mode is played on (a new run id re-mounts it). */
+export function launch(state: FlowState, mode: GameModeId): FlowState {
+  if (mode === 'duel') return { ...state, mode, phase: 'lobby', duelSeed: null };
+  const def = getMode(mode);
+  const phase: Phase = def.kind === 'dance' ? 'dance' : def.kind === 'arcade' ? 'arcade' : def.players === 2 ? 'versus' : 'game';
+  return { ...state, mode, phase, runId: state.runId + 1, duelSeed: null };
+}
+
+/** Starts the camera setup: from the permission prompt, or from the check if the camera is already on. */
+function setup(state: FlowState, after: AfterSetup, cameraOn: boolean): FlowState {
+  return { ...state, after, errorKind: null, phase: cameraOn ? 'check' : 'permission' };
+}
+
+/** Where the setup ends. */
+function afterSetup(state: FlowState): FlowState {
+  if (state.after === 'play') return launch(state, state.mode);
+  return { ...state, phase: 'menu' };
+}
 
 export function flowReducer(state: FlowState, action: FlowAction): FlowState {
   switch (action.type) {
-    case 'START':
+    case 'PLAY':
+      if (state.ready) return launch(state, action.mode);
+      return setup({ ...state, mode: action.mode }, 'play', action.cameraOn);
+    case 'TUTORIAL':
+      if (state.ready) return { ...state, phase: 'tutorial', after: 'menu' };
+      return setup(state, 'tutorial', action.cameraOn);
+    case 'RETRY':
       return { ...state, phase: 'permission', errorKind: null };
     case 'CAMERA_READY':
       return state.phase === 'permission' ? { ...state, phase: 'check' } : state;
     case 'CAMERA_FAILED':
-      return { ...state, phase: 'camera-error', errorKind: action.kind };
+      return { ...state, phase: 'camera-error', errorKind: action.kind, ready: false };
     case 'CHECK_PASSED':
       return state.phase === 'check' ? { ...state, phase: 'calibration' } : state;
-    case 'CALIBRATED':
+    case 'CALIBRATED': {
       if (state.phase !== 'calibration') return state;
-      return { ...state, phase: state.tutorialDone ? 'modes' : 'tutorial' };
+      const next = { ...state, ready: true };
+      if (state.after === 'tutorial' || !state.tutorialDone) return { ...next, phase: 'tutorial' };
+      return afterSetup(next);
+    }
     case 'TUTORIAL_DONE':
-      return state.phase === 'tutorial' ? { ...state, phase: 'modes', tutorialDone: true } : state;
-    case 'SELECT_MODE':
-      if (action.mode === 'duel') return { ...state, mode: 'duel', phase: 'lobby', duelSeed: null };
-      if (getMode(action.mode).kind === 'dance') return { ...state, mode: action.mode, phase: 'dance', runId: state.runId + 1, duelSeed: null };
-      if (getMode(action.mode).kind === 'arcade') return { ...state, mode: action.mode, phase: 'arcade', runId: state.runId + 1, duelSeed: null };
-      if (getMode(action.mode).players === 2) return { ...state, mode: action.mode, phase: 'versus', runId: state.runId + 1, duelSeed: null };
-      return newRun(state, { mode: action.mode, duelSeed: null });
+      return state.phase === 'tutorial' ? afterSetup({ ...state, tutorialDone: true, ready: true }) : state;
     case 'DUEL_START':
-      return state.phase === 'lobby' ? newRun(state, { mode: 'duel', duelSeed: action.seed }) : state;
+      return state.phase === 'lobby' ? { ...state, mode: 'duel', phase: 'game', runId: state.runId + 1, duelSeed: action.seed } : state;
     case 'GAME_OVER':
       return state.phase === 'game' ? { ...state, phase: 'results', result: action.result } : state;
     case 'PLAY_AGAIN':
       if (state.phase === 'dance' || state.phase === 'versus' || state.phase === 'arcade') return { ...state, runId: state.runId + 1 };
-      return state.mode === 'duel' ? { ...state, phase: 'lobby', duelSeed: null } : newRun(state);
-    case 'MODES':
-      return { ...state, phase: 'modes' };
+      return state.mode === 'duel' ? { ...state, phase: 'lobby', duelSeed: null } : launch(state, state.mode);
+    case 'MENU':
+      return { ...state, phase: 'menu' };
     case 'RECALIBRATE':
-      return { ...state, phase: 'calibration' };
+      // Recalibrate, then carry on with the same mode.
+      return { ...state, phase: 'calibration', after: 'play' };
     case 'LEADERBOARD':
       return state.phase === 'leaderboard' ? state : { ...state, phase: 'leaderboard', back: state.phase };
     case 'BACK':
       return state.phase === 'leaderboard' ? { ...state, phase: state.back } : state;
-    case 'EXIT':
-      return { ...INITIAL_FLOW, tutorialDone: state.tutorialDone, mode: state.mode };
   }
 }
 
@@ -116,5 +139,4 @@ export const SETUP_STEPS: { phase: Phase; label: string }[] = [
   { phase: 'check', label: 'Камера' },
   { phase: 'calibration', label: 'Калибровка' },
   { phase: 'tutorial', label: 'Обучение' },
-  { phase: 'modes', label: 'Режим' },
 ];

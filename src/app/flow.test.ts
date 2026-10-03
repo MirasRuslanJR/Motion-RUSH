@@ -19,8 +19,9 @@ const result: SessionResult = {
   timeline: [],
 };
 
-const setup: FlowAction[] = [
-  { type: 'START' },
+/** The first game: camera permission, check, calibration and the tutorial, then the mode. */
+const firstPlay = (mode: FlowState['mode']): FlowAction[] => [
+  { type: 'PLAY', mode, cameraOn: false },
   { type: 'CAMERA_READY' },
   { type: 'CHECK_PASSED' },
   { type: 'CALIBRATED' },
@@ -28,30 +29,35 @@ const setup: FlowAction[] = [
 ];
 
 describe('app flow', () => {
-  it('walks the full scenario: setup → mode select → game → results → replay', () => {
-    const modes = run(setup);
-    expect(modes.phase).toBe('modes');
-    const game = run([{ type: 'SELECT_MODE', mode: 'sprint' }], modes);
-    expect(game).toMatchObject({ phase: 'game', mode: 'sprint', runId: 1 });
+  it('opens on the main menu — there is no separate start screen', () => {
+    expect(INITIAL_FLOW.phase).toBe('menu');
+  });
+
+  it('the first game sets the camera up and then starts the chosen mode right away', () => {
+    expect(run([{ type: 'PLAY', mode: 'sprint', cameraOn: false }]).phase).toBe('permission');
+    const game = run(firstPlay('sprint'));
+    expect(game).toMatchObject({ phase: 'game', mode: 'sprint', runId: 1, ready: true, tutorialDone: true });
     const done = run([{ type: 'GAME_OVER', result }], game);
     expect(done.phase).toBe('results');
     expect(run([{ type: 'PLAY_AGAIN' }], done)).toMatchObject({ phase: 'game', mode: 'sprint', runId: 2 });
-    expect(run([{ type: 'MODES' }], done).phase).toBe('modes');
+    const menu = run([{ type: 'MENU' }], done);
+    expect(menu.phase).toBe('menu');
+    // Once set up, a mode starts straight from the menu.
+    expect(run([{ type: 'PLAY', mode: 'dance', cameraOn: true }], menu)).toMatchObject({ phase: 'dance', mode: 'dance', runId: 2 });
   });
 
-  it('mini-games open the arcade screen and replay in place', () => {
-    const modes = run(setup);
-    const arcade = run([{ type: 'SELECT_MODE', mode: 'stars' }], modes);
-    expect(arcade).toMatchObject({ phase: 'arcade', mode: 'stars', runId: 1 });
-    expect(run([{ type: 'PLAY_AGAIN' }], arcade)).toMatchObject({ phase: 'arcade', mode: 'stars', runId: 2 });
-    expect(run([{ type: 'MODES' }], arcade).phase).toBe('modes');
-    for (const mode of ['freeze', 'reaction', 'squats'] as const) {
-      expect(run([{ type: 'SELECT_MODE', mode }], modes).phase).toBe('arcade');
-    }
+  it('mini-games, the dance floor and two-player modes open their own screens and replay in place', () => {
+    const ready = run([...firstPlay('classic'), { type: 'MENU' }]);
+    const arcade = run([{ type: 'PLAY', mode: 'stars', cameraOn: true }], ready);
+    expect(arcade).toMatchObject({ phase: 'arcade', mode: 'stars' });
+    expect(run([{ type: 'PLAY_AGAIN' }], arcade)).toMatchObject({ phase: 'arcade', runId: arcade.runId + 1 });
+    for (const mode of ['freeze', 'reaction', 'squats'] as const) expect(run([{ type: 'PLAY', mode, cameraOn: true }], ready).phase).toBe('arcade');
+    expect(run([{ type: 'PLAY', mode: 'versus', cameraOn: true }], ready).phase).toBe('versus');
+    expect(run([{ type: 'PLAY', mode: 'dance-duo', cameraOn: true }], ready).phase).toBe('dance');
   });
 
   it('online duel goes through the lobby and rematches there', () => {
-    const lobby = run([...setup, { type: 'SELECT_MODE', mode: 'duel' }]);
+    const lobby = run(firstPlay('duel'));
     expect(lobby.phase).toBe('lobby');
     const game = run([{ type: 'DUEL_START', seed: 42 }], lobby);
     expect(game).toMatchObject({ phase: 'game', mode: 'duel', duelSeed: 42 });
@@ -59,26 +65,39 @@ describe('app flow', () => {
     expect(again.phase).toBe('lobby');
   });
 
-  it('leaderboard returns to where it was opened', () => {
-    expect(run([{ type: 'LEADERBOARD' }, { type: 'BACK' }]).phase).toBe('landing');
-    const modes = run(setup);
-    expect(run([{ type: 'LEADERBOARD' }, { type: 'BACK' }], modes).phase).toBe('modes');
+  it('the tutorial runs the first time only, and again on request from the menu', () => {
+    const ready = run([...firstPlay('classic'), { type: 'MENU' }]);
+    // Second setup (e.g. recalibration) skips the tutorial.
+    expect(run([{ type: 'RECALIBRATE' }, { type: 'CALIBRATED' }], ready)).toMatchObject({ phase: 'game', mode: 'classic' });
+    const tutorial = run([{ type: 'TUTORIAL', cameraOn: true }], ready);
+    expect(tutorial.phase).toBe('tutorial');
+    expect(run([{ type: 'TUTORIAL_DONE' }], tutorial).phase).toBe('menu');
+    // Before the camera is set up the tutorial comes after the calibration and returns to the menu.
+    const cold = run([{ type: 'TUTORIAL', cameraOn: false }, { type: 'CAMERA_READY' }, { type: 'CHECK_PASSED' }, { type: 'CALIBRATED' }]);
+    expect(cold.phase).toBe('tutorial');
+    expect(run([{ type: 'TUTORIAL_DONE' }], cold).phase).toBe('menu');
   });
 
-  it('recalibration skips the tutorial once it was completed', () => {
-    const s = run([...setup, { type: 'SELECT_MODE', mode: 'classic' }, { type: 'GAME_OVER', result }, { type: 'RECALIBRATE' }, { type: 'CALIBRATED' }]);
-    expect(s.phase).toBe('modes');
+  it('an already running camera skips the permission step', () => {
+    expect(run([{ type: 'PLAY', mode: 'classic', cameraOn: true }]).phase).toBe('check');
+  });
+
+  it('leaderboard returns to where it was opened', () => {
+    expect(run([{ type: 'LEADERBOARD' }, { type: 'BACK' }]).phase).toBe('menu');
+    const done = run([...firstPlay('classic'), { type: 'GAME_OVER', result }]);
+    expect(run([{ type: 'LEADERBOARD' }, { type: 'BACK' }], done).phase).toBe('results');
   });
 
   it('camera failure leads to an error state and retry restarts permission', () => {
-    const failed = run([{ type: 'START' }, { type: 'CAMERA_FAILED', kind: 'denied' }]);
-    expect(failed).toMatchObject({ phase: 'camera-error', errorKind: 'denied' });
-    expect(run([{ type: 'START' }], failed).phase).toBe('permission');
+    const failed = run([{ type: 'PLAY', mode: 'classic', cameraOn: false }, { type: 'CAMERA_FAILED', kind: 'denied' }]);
+    expect(failed).toMatchObject({ phase: 'camera-error', errorKind: 'denied', ready: false });
+    expect(run([{ type: 'RETRY' }], failed).phase).toBe('permission');
   });
 
   it('ignores out-of-order transitions', () => {
-    expect(run([{ type: 'CHECK_PASSED' }]).phase).toBe('landing');
-    expect(run([{ type: 'GAME_OVER', result }]).phase).toBe('landing');
-    expect(run([{ type: 'DUEL_START', seed: 1 }]).phase).toBe('landing');
+    expect(run([{ type: 'CHECK_PASSED' }]).phase).toBe('menu');
+    expect(run([{ type: 'GAME_OVER', result }]).phase).toBe('menu');
+    expect(run([{ type: 'DUEL_START', seed: 1 }]).phase).toBe('menu');
+    expect(run([{ type: 'TUTORIAL_DONE' }]).phase).toBe('menu');
   });
 });

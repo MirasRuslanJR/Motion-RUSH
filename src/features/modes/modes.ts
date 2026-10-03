@@ -3,6 +3,7 @@ import { dailySeed, generateCourse } from '../gameplay/course';
 import type { GameRules } from '../gameplay/GameEngine';
 import type { CourseItem } from '../gameplay/types';
 import type { ControlScheme } from '../gestures/types';
+import { DEFAULT_DIFFICULTY, difficultyOf, livesAt, scaleCourse, timingAt, type Difficulty, type DifficultyDef } from './difficulty';
 
 export type GameModeId =
   | 'classic'
@@ -380,10 +381,47 @@ export function seedForMode(mode: GameModeDef, sharedSeed?: number): number {
   return randomSeed();
 }
 
-export function courseForMode(mode: GameModeDef, sharedSeed?: number): CourseItem[] {
-  return generateCourse(seedForMode(mode, sharedSeed), COURSES[mode.course]);
+/**
+ * Difficulty applies where it makes sense: not to Practice (slow by design), not to
+ * the online duel (both players race the same course) and not to Reaction and Squat 30
+ * (fixed tests where the time or the count is the result).
+ */
+export function supportsDifficulty(mode: GameModeDef): boolean {
+  if (mode.practice || mode.online) return false;
+  return mode.kind !== 'arcade' || mode.arcade === 'stars' || mode.arcade === 'freeze';
 }
 
-export function rulesForMode(mode: GameModeDef, scheme: ControlScheme): GameRules {
-  return { mode: mode.id, scheme, energy: mode.energy, practice: mode.practice, timing: mode.timing };
+/** The difficulty a mode is actually played at. */
+export function effectiveDifficulty(mode: GameModeDef, difficulty: Difficulty): DifficultyDef {
+  return difficultyOf(supportsDifficulty(mode) ? difficulty : DEFAULT_DIFFICULTY);
+}
+
+export function courseForMode(mode: GameModeDef, sharedSeed?: number, difficulty: Difficulty = DEFAULT_DIFFICULTY): CourseItem[] {
+  return generateCourse(seedForMode(mode, sharedSeed), scaleCourse(COURSES[mode.course], effectiveDifficulty(mode, difficulty)));
+}
+
+type Timing = Required<NonNullable<GameRules['timing']>>;
+
+/** The widest of the given timing windows, field by field (defaults from GAME_CONFIG). */
+export function widestTiming(...list: GameRules['timing'][]): Timing {
+  const out: Timing = { airtimeMs: GAME_CONFIG.airtimeMs, clearGraceMs: GAME_CONFIG.clearGraceMs, duckGraceMs: GAME_CONFIG.duckGraceMs };
+  for (const t of list) {
+    if (!t) continue;
+    out.airtimeMs = Math.max(out.airtimeMs, t.airtimeMs ?? 0);
+    out.clearGraceMs = Math.max(out.clearGraceMs, t.clearGraceMs ?? 0);
+    out.duckGraceMs = Math.max(out.duckGraceMs, t.duckGraceMs ?? 0);
+  }
+  return out;
+}
+
+export function rulesForMode(mode: GameModeDef, scheme: ControlScheme, difficulty: Difficulty = DEFAULT_DIFFICULTY): GameRules {
+  const d = effectiveDifficulty(mode, difficulty);
+  return {
+    mode: mode.id,
+    scheme,
+    energy: livesAt(mode.energy, d),
+    practice: mode.practice,
+    timing: mode.timing || d.window > 1 ? timingAt(widestTiming(mode.timing), d) : undefined,
+    scoreScale: d.score,
+  };
 }

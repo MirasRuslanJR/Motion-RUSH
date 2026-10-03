@@ -7,7 +7,8 @@ import { GameEngine, type GameEvent, type PlayerInput } from '../../features/gam
 import { isPickup, OBSTACLE_REQUIREMENT } from '../../features/gameplay/types';
 import { isErrorVerdict } from '../../features/gestures/ErrorDiagnosisEngine';
 import { motionMeta, schemeOf, type Arrow, type ExpectedMotion } from '../../features/gestures/types';
-import { courseForMode, rulesForMode, type GameModeDef } from '../../features/modes/modes';
+import type { Difficulty } from '../../features/modes/difficulty';
+import { courseForMode, effectiveDifficulty, rulesForMode, type GameModeDef } from '../../features/modes/modes';
 import { PLAYER_COLORS } from '../../features/render/DanceRenderer';
 import { GameRenderer } from '../../features/render/GameRenderer';
 import { computeSessionStats } from '../../features/results/sessionStats';
@@ -22,6 +23,7 @@ import './VersusScreen.css';
 interface VersusScreenProps {
   engine: MotionEngine;
   mode: GameModeDef;
+  difficulty: Difficulty;
   onAgain: () => void;
   onModes: () => void;
 }
@@ -93,11 +95,13 @@ function sound(event: GameEvent, primary: boolean): void {
  * screens. Each player has a tracker of their own (split tracking in the worker)
  * and an independent recognition pipeline, error-mode hints included.
  */
-export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenProps) {
+export function VersusScreen({ engine, mode, difficulty, onAgain, onModes }: VersusScreenProps) {
+  const [level] = useState(() => effectiveDifficulty(mode, difficulty));
   const [games] = useState(() => {
-    const course = courseForMode(mode);
-    return [0, 1].map(() => new GameEngine(course, undefined, rulesForMode(mode, 'body')));
+    const course = courseForMode(mode, undefined, level.id);
+    return [0, 1].map(() => new GameEngine(course, undefined, rulesForMode(mode, 'body', level.id)));
   });
+  const lives = games[0]?.rules.energy ?? mode.energy;
   const trackers = useRef<PlayerTracker[] | null>(null);
   const canvases = useRef<(HTMLCanvasElement | null)[]>([null, null]);
   const backgrounds = useRef<(HTMLCanvasElement | null)[]>([null, null]);
@@ -239,9 +243,9 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
                 <div className="versus__top">
                   <span className="versus__tag">Игрок {i + 1}</span>
                   <strong className="versus__score">{(s?.score ?? 0).toLocaleString('ru-RU')}</strong>
-                  <div className="hud__energy" role="img" aria-label={`Жизни: ${s?.energy ?? mode.energy}`}>
-                    {Array.from({ length: mode.energy }, (_, k) => (
-                      <span key={k} className={`hud__cell ${k < (s?.energy ?? mode.energy) ? 'is-full' : ''}`} />
+                  <div className="hud__energy" role="img" aria-label={`Жизни: ${s?.energy ?? lives}`}>
+                    {Array.from({ length: lives }, (_, k) => (
+                      <span key={k} className={`hud__cell ${k < (s?.energy ?? lives) ? 'is-full' : ''}`} />
                     ))}
                   </div>
                 </div>
@@ -288,7 +292,9 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
       <AnimatePresence>
         {stage === 'setup' && (
           <motion.div key="setup" className="overlay versus__setup" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <p className="t-label">{mode.title} · игра вдвоём</p>
+            <p className="t-label">
+              {mode.title} · игра вдвоём · {level.title}
+            </p>
             <h2 className="t-headline">Встаньте рядом: игрок 1 слева, игрок 2 справа</h2>
             <div className="versus__cam">
               <CameraViewport engine={engine} variant="panel" hud={false} standZones={standZones} className="versus__camera" />
@@ -344,7 +350,7 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
                 Реванш
               </button>
               <button type="button" className="btn btn--ghost" onClick={onModes}>
-                <Icon name="left" size={16} /> Режимы
+                <Icon name="left" size={16} /> Меню
               </button>
             </div>
           </motion.div>

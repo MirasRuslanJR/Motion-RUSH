@@ -13,14 +13,15 @@ import {
   danceHint,
   DANCE_CONFIG,
   DANCE_POSES,
-  generateChoreography,
   type DanceInput,
   type DancerState,
 } from '../../features/dance/dance';
+import { scriptedChoreography, sectionAt } from '../../features/dance/choreography';
 import { DanceMusic } from '../../features/dance/music';
 import type { MotionEngine, MotionFrame } from '../../features/engine/MotionEngine';
 import { extractGeometry } from '../../features/gestures/FeatureExtractor';
-import { randomSeed, type GameModeDef } from '../../features/modes/modes';
+import { danceTune, type Difficulty } from '../../features/modes/difficulty';
+import { effectiveDifficulty, type GameModeDef } from '../../features/modes/modes';
 import { DanceRenderer, PLAYER_COLORS } from '../../features/render/DanceRenderer';
 import type { Pose } from '../../features/tracking/landmarks';
 import { StandGuide, STAND_ROOM_SW } from '../../features/versus/standZone';
@@ -42,6 +43,7 @@ export interface DanceRunResult {
 interface DanceScreenProps {
   engine: MotionEngine;
   mode: GameModeDef;
+  difficulty: Difficulty;
   profile: Profile;
   onRecord: (result: DanceRunResult) => RecordedSession | null;
   onProfile: (profile: Profile) => void;
@@ -110,11 +112,15 @@ interface Hud {
   countdown: number | null;
   /** Id of the pose card that is coming up now (drives the "next poses" list). */
   currentId: number | null;
+  /** The part of the song playing now ("Припев"), null before the music. */
+  section: string | null;
 }
 
-export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgain, onModes, onLeaderboard }: DanceScreenProps) {
+export function DanceScreen({ engine, mode, difficulty, profile, onRecord, onProfile, onAgain, onModes, onLeaderboard }: DanceScreenProps) {
   const players = mode.players;
-  const [dance] = useState(() => new DanceEngine(generateChoreography(randomSeed()), players));
+  const [level] = useState(() => effectiveDifficulty(mode, difficulty));
+  // A written choreography for the song: the same dance every time, denser on harder levels.
+  const [dance] = useState(() => new DanceEngine(scriptedChoreography(level.id), players, danceTune(level)));
   const [music] = useState(() => new DanceMusic());
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<DanceRenderer | null>(null);
@@ -133,6 +139,7 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
     hints: Array.from({ length: players }, () => ''),
     countdown: null,
     currentId: null,
+    section: null,
   }));
   const hudRef = useRef(hud);
   const [recorded, setRecorded] = useState<RecordedSession | null>(null);
@@ -230,14 +237,16 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
       combos: dance.dancers.map((d) => d.combo),
       multipliers: dance.dancers.map((_, i) => dance.multiplier(i)),
       // Error mode on the dance floor: what the body still has to do, which arm to move and which way.
-      hints: inputs.map((a) => (current && songTime >= current.at - DANCE_CONFIG.leadMs * 0.6 ? danceHint(a, current.pose) : '')),
+      hints: inputs.map((a) => (current && songTime >= current.at - DANCE_CONFIG.leadMs * 0.6 ? danceHint(a, current.pose, dance.tune.tolerance) : '')),
       countdown: stageRef.current === 'playing' && introBeat >= 4 && introBeat < 8 ? 8 - introBeat : null,
       currentId: current?.id ?? null,
+      section: songTime >= 0 && stageRef.current === 'playing' ? sectionAt(Math.floor(songTime / BEAT_MS)).title : null,
     };
     const prev = hudRef.current;
     const changed =
       next.countdown !== prev.countdown ||
       next.currentId !== prev.currentId ||
+      next.section !== prev.section ||
       next.loading !== prev.loading ||
       next.visible.some((v, i) => v !== prev.visible[i]) ||
       next.statuses.some((v, i) => v !== prev.statuses[i]) ||
@@ -279,6 +288,11 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
           <div className="dance__progress">
             <div ref={progressRef} className="dance__progress-fill" />
           </div>
+          {hud.section && (
+            <p className="dance__section">
+              {hud.section} <span>· {level.title}</span>
+            </p>
+          )}
           {stage === 'playing' && (
             <div className="dance__hints">
               {hud.hints.map((h, i) =>
@@ -296,7 +310,9 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
         <AnimatePresence>
           {stage === 'waiting' && (
             <motion.div key="wait" className="overlay dance__overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <p className="t-label">{mode.title}</p>
+              <p className="t-label">
+                {mode.title} · {level.title}
+              </p>
               <h2 className="t-headline">
                 {players === 2 ? 'Встаньте вдвоём — каждый в свою подсвеченную зону' : 'Встань в кадр — музыка начнётся сама'}
               </h2>
@@ -364,7 +380,7 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
             <div className="dance__actions">
               <HoldGesture engine={engine} label="Ещё раз" onConfirm={onAgain} />
               <button type="button" className="btn btn--ghost btn--small" onClick={onModes}>
-                <Icon name="left" size={16} /> Режимы
+                <Icon name="left" size={16} /> Меню
               </button>
               <button type="button" className="btn btn--ghost btn--small" onClick={onLeaderboard}>
                 Рейтинг

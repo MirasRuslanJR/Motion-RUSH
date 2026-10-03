@@ -213,7 +213,7 @@ export function ResultsScreen({ engine, result, mode, recorded, profile, duel, o
             <HoldGesture engine={engine} label={duel ? 'Реванш' : 'Играть снова'} onConfirm={onPlayAgain} />
             <div className="results__links">
               <button type="button" className="btn btn--ghost btn--small" onClick={onModes}>
-                Режимы
+                Меню
               </button>
               <button type="button" className="btn btn--ghost btn--small" onClick={onLeaderboard}>
                 Рейтинг

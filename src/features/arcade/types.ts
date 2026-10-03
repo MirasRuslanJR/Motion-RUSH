@@ -74,6 +74,15 @@ export interface ArcadeGame {
   readonly expected: ExpectedMotion | null;
 }
 
+/** Difficulty of a mini-game: pace (more = faster), lives added and what a point is worth. */
+export interface ArcadeTune {
+  pace: number;
+  lives: number;
+  score: number;
+}
+
+export const NORMAL_TUNE: ArcadeTune = { pace: 1, lives: 0, score: 1 };
+
 /** Shoulder centre and width of a pose (frame units), null when the shoulders are not visible. */
 export function bodyOf(pose: Pose): { center: Point; sw: number } | null {
   const ls = lm(pose, LM.LEFT_SHOULDER);

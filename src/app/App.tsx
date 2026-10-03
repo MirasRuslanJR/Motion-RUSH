@@ -22,9 +22,8 @@ import { CameraErrorScreen } from '../screens/CameraErrorScreen';
 import { DanceScreen, type DanceRunResult } from '../screens/dance/DanceScreen';
 import { DuelLobbyScreen } from '../screens/DuelLobbyScreen';
 import { GameScreen } from '../screens/game/GameScreen';
-import { LandingScreen } from '../screens/LandingScreen';
 import { LeaderboardScreen } from '../screens/LeaderboardScreen';
-import { ModeSelectScreen } from '../screens/ModeSelectScreen';
+import { MenuScreen } from '../screens/menu/MenuScreen';
 import { PermissionScreen } from '../screens/PermissionScreen';
 import { ResultsScreen } from '../screens/results/ResultsScreen';
 import { TutorialScreen } from '../screens/TutorialScreen';
@@ -55,7 +54,6 @@ export function App() {
   const roomRef = useRef<DuelRoom | null>(null);
   /** Invite link: ?room=CODE opens the duel lobby with that code once the camera is set up. */
   const [inviteCode] = useState(() => normalizeRoomCode(new URLSearchParams(location.search).get('room') ?? ''));
-  const inviteUsed = useRef(false);
 
   const replaceRoom = useCallback((next: DuelRoom | null) => {
     void roomRef.current?.leave();
@@ -69,14 +67,7 @@ export function App() {
     if (roomRef.current && (flow.mode !== 'duel' || !ROOM_PHASES.includes(flow.phase))) replaceRoom(null);
   }, [flow.mode, flow.phase, replaceRoom]);
 
-  // An invited player lands in the duel lobby right after setup (a nickname is required first).
-  useEffect(() => {
-    if (inviteUsed.current || flow.phase !== 'modes' || inviteCode.length !== 4 || !ONLINE_ENABLED || profile.nickname.length < 2) return;
-    inviteUsed.current = true;
-    dispatch({ type: 'SELECT_MODE', mode: 'duel' });
-  }, [flow.phase, inviteCode, profile.nickname]);
-
-  // Preload the pose model while the player reads the landing screen.
+  // Preload the pose model while the player looks around the menu.
   useEffect(() => {
     void loadPoseBackend().catch(() => undefined);
   }, []);
@@ -106,9 +97,9 @@ export function App() {
     setEngine(next);
   }, []);
 
-  const start = useCallback(() => {
+  /** Turns the camera on (a new engine); the flow moves on when it is live or has failed. */
+  const startCamera = useCallback(() => {
     sfx.unlock();
-    dispatch({ type: 'START' });
     const next = new MotionEngine();
     replaceEngine(next);
     next
@@ -121,6 +112,28 @@ export function App() {
       });
   }, [replaceEngine]);
 
+  const cameraOn = useCallback(() => engineRef.current?.ui.get().camera === 'live', []);
+  /** Plays a mode from the menu: right away once the camera is set up, after the setup otherwise. */
+  const onPlay = useCallback(
+    (mode: GameModeId) => {
+      sfx.unlock();
+      const on = cameraOn();
+      if (!on && !engineRef.current) startCamera();
+      dispatch({ type: 'PLAY', mode, cameraOn: on });
+    },
+    [cameraOn, startCamera],
+  );
+  const onTutorial = useCallback(() => {
+    sfx.unlock();
+    const on = cameraOn();
+    if (!on && !engineRef.current) startCamera();
+    dispatch({ type: 'TUTORIAL', cameraOn: on });
+  }, [cameraOn, startCamera]);
+  const onRetry = useCallback(() => {
+    dispatch({ type: 'RETRY' });
+    startCamera();
+  }, [startCamera]);
+
   const onCameraFail = useCallback((kind: CameraErrorKind) => dispatch({ type: 'CAMERA_FAILED', kind }), []);
   const onCheckPassed = useCallback(() => dispatch({ type: 'CHECK_PASSED' }), []);
   const onCalibrated = useCallback(() => dispatch({ type: 'CALIBRATED' }), []);
@@ -131,10 +144,9 @@ export function App() {
     dispatch({ type: 'PLAY_AGAIN' });
   }, []);
   const onRecalibrate = useCallback(() => dispatch({ type: 'RECALIBRATE' }), []);
-  const onModes = useCallback(() => dispatch({ type: 'MODES' }), []);
+  const onModes = useCallback(() => dispatch({ type: 'MENU' }), []);
   const onLeaderboard = useCallback(() => dispatch({ type: 'LEADERBOARD' }), []);
   const onBack = useCallback(() => dispatch({ type: 'BACK' }), []);
-  const onSelectMode = useCallback((mode: GameModeId) => dispatch({ type: 'SELECT_MODE', mode }), []);
   const onDuelStart = useCallback((seed: number) => dispatch({ type: 'DUEL_START', seed }), []);
 
   const openRoom = useCallback(
@@ -173,7 +185,7 @@ export function App() {
   }, [flow.phase, cancelQuick]);
   const onLeaveRoom = useCallback(() => {
     if (roomRef.current) replaceRoom(null);
-    else dispatch({ type: 'MODES' });
+    else dispatch({ type: 'MENU' });
   }, [replaceRoom]);
 
   const onFinish = useCallback((result: SessionResult) => {
@@ -218,11 +230,11 @@ export function App() {
     return saved;
   }, []);
 
+  /** The logo goes to the main menu; the camera stays on, so the next game starts right away. */
   const goHome = useCallback(() => {
-    replaceEngine(null);
     setProfile(loadProfile());
-    dispatch({ type: 'EXIT' });
-  }, [replaceEngine]);
+    dispatch({ type: 'MENU' });
+  }, []);
 
   const toggleMute = useCallback(() => {
     sfx.unlock();
@@ -234,8 +246,22 @@ export function App() {
 
   let screen: ReactNode = null;
   switch (flow.phase) {
-    case 'landing':
-      screen = <LandingScreen profile={profile} onStart={start} onLeaderboard={onLeaderboard} />;
+    case 'menu':
+      screen = (
+        <MenuScreen
+          engine={engine}
+          ready={flow.ready}
+          profile={profile}
+          lastMode={flow.mode}
+          invite={inviteCode.length === 4 && ONLINE_ENABLED ? inviteCode : null}
+          muted={muted}
+          onToggleMute={toggleMute}
+          onPlay={onPlay}
+          onTutorial={onTutorial}
+          onLeaderboard={onLeaderboard}
+          onProfile={setProfile}
+        />
+      );
       break;
     case 'leaderboard':
       screen = <LeaderboardScreen profile={profile} initialMode={flow.mode} onBack={onBack} />;
@@ -244,7 +270,7 @@ export function App() {
       screen = <PermissionScreen />;
       break;
     case 'camera-error':
-      screen = <CameraErrorScreen kind={flow.errorKind ?? 'unknown'} onRetry={start} />;
+      screen = <CameraErrorScreen kind={flow.errorKind ?? 'unknown'} onRetry={onRetry} />;
       break;
     case 'check':
       if (engine) screen = <CameraCheckScreen engine={engine} onReady={onCheckPassed} />;
@@ -255,20 +281,6 @@ export function App() {
     case 'tutorial':
       if (engine) screen = <TutorialScreen engine={engine} onDone={onTutorialDone} />;
       break;
-    case 'modes':
-      if (engine) {
-        screen = (
-          <ModeSelectScreen
-            engine={engine}
-            profile={profile}
-            initialMode={flow.mode}
-            onSelect={onSelectMode}
-            onLeaderboard={onLeaderboard}
-            onProfile={setProfile}
-          />
-        );
-      }
-      break;
     case 'dance':
       if (engine) {
         screen = (
@@ -276,6 +288,7 @@ export function App() {
             key={flow.runId}
             engine={engine}
             mode={getMode(flow.mode)}
+            difficulty={profile.difficulty}
             profile={profile}
             onRecord={onDanceRecord}
             onProfile={setProfile}
@@ -287,7 +300,7 @@ export function App() {
       }
       break;
     case 'versus':
-      if (engine) screen = <VersusScreen key={flow.runId} engine={engine} mode={getMode(flow.mode)} onAgain={onPlayAgain} onModes={onModes} />;
+      if (engine) screen = <VersusScreen key={flow.runId} engine={engine} mode={getMode(flow.mode)} difficulty={profile.difficulty} onAgain={onPlayAgain} onModes={onModes} />;
       break;
     case 'arcade':
       if (engine) {
@@ -296,6 +309,7 @@ export function App() {
             key={flow.runId}
             engine={engine}
             mode={getMode(flow.mode)}
+            difficulty={profile.difficulty}
             profile={profile}
             onRecord={onArcadeRecord}
             onAgain={onPlayAgain}
@@ -330,6 +344,7 @@ export function App() {
             key={flow.runId}
             engine={engine}
             mode={getMode(flow.mode)}
+            difficulty={profile.difficulty}
             sharedSeed={flow.duelSeed}
             duel={flow.mode === 'duel' ? room : null}
             onFinish={onFinish}
@@ -361,7 +376,7 @@ export function App() {
   return (
     <MotionConfig reducedMotion="user">
       <div className={`app app--${flow.phase}`}>
-        <TopBar phase={flow.phase} muted={muted} onToggleMute={toggleMute} onHome={goHome} />
+        {flow.phase !== 'menu' && <TopBar phase={flow.phase} muted={muted} onToggleMute={toggleMute} onHome={goHome} />}
         <div className="app__screens">
           <AnimatePresence initial={false}>
             <motion.div

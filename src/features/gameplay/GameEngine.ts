@@ -63,6 +63,8 @@ export interface GameRules {
    * so a move registers later). Defaults come from GAME_CONFIG.
    */
   timing?: { airtimeMs?: number; clearGraceMs?: number; duckGraceMs?: number };
+  /** Every point is worth this much (harder difficulty = more points). */
+  scoreScale?: number;
 }
 
 const DEFAULT_RULES: GameRules = { mode: 'classic', scheme: 'seated', energy: GAME_CONFIG.energy, practice: false };
@@ -186,6 +188,11 @@ export class GameEngine {
     const s = this.cfg.scoring;
     const combo = Math.min(s.maxMultiplier, 1 + Math.floor(this.combo / s.comboPerMultiplier));
     return combo * (this.boosted ? this.cfg.powerUps.boostMultiplier : 1);
+  }
+
+  /** Points for a base value: difficulty scale, then the combo/boost multiplier. */
+  private points(base: number): number {
+    return Math.round(base * (this.rules.scoreScale ?? 1)) * this.multiplier;
   }
 
   /** Motion the player must perform right now (drives error mode), if any. */
@@ -366,13 +373,13 @@ export class GameEngine {
               this.energy++;
               events.push({ type: 'powerup', item: orb, kind: 'HEART' });
             } else {
-              const points = pu.heartPoints * this.multiplier;
+              const points = this.points(pu.heartPoints);
               this.score += points;
               events.push({ type: 'powerup', item: orb, kind: 'HEART', points });
             }
             break;
           default: {
-            const points = this.cfg.scoring.orb * this.multiplier;
+            const points = this.points(this.cfg.scoring.orb);
             this.score += points;
             events.push({ type: 'orb', item: orb, points });
           }
@@ -456,7 +463,7 @@ export class GameEngine {
   private resolveClear(a: ActiveObstacle, quality: ClearQuality, events: GameEvent[]): void {
     const s = this.cfg.scoring;
     const multiplier = this.multiplier;
-    const points = (quality === 'perfect' ? s.perfect : s.clear) * multiplier;
+    const points = this.points(quality === 'perfect' ? s.perfect : s.clear);
     this.score += points;
     this.combo++;
     this.bestCombo = Math.max(this.bestCombo, this.combo);

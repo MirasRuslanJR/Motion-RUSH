@@ -152,6 +152,18 @@ button {
   user-select: none;
 }
 
+/* The main menu has no top bar: it fills the window. */
+.app--menu {
+  grid-template-rows: 1fr;
+}
+
+@media (min-width: 761px) and (min-height: 560px) {
+  .app--menu {
+    height: 100dvh;
+    overflow: hidden;
+  }
+}
+
 /* ── Top bar ── */
 .topbar {
   display: flex;

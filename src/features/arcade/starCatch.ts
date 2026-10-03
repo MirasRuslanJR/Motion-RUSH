@@ -2,7 +2,7 @@ import type { SfxName } from '../../lib/audio/sfx';
 import { clamp, type Point } from '../../lib/math/geometry';
 import { createRng } from '../gameplay/course';
 import { LM, lm, type Pose } from '../tracking/landmarks';
-import { bodyOf, clock, lerpRange, type ArcadeGame, type ArcadeHud, type ArcadeInput, type ArcadeResult, type Tone } from './types';
+import { bodyOf, clock, lerpRange, NORMAL_TUNE, type ArcadeGame, type ArcadeHud, type ArcadeInput, type ArcadeResult, type ArcadeTune, type Tone } from './types';
 
 /** Star Catch tuning. Distances are in shoulder widths (SW) of the player. */
 export const STARS = {
@@ -105,8 +105,12 @@ export class StarCatch implements ArcadeGame {
   private toastState: ArcadeHud['toast'] = null;
   private toastId = 0;
 
-  constructor(seed = Math.floor(Math.random() * 0x7fffffff)) {
+  private readonly tune: ArcadeTune;
+
+  constructor(seed = Math.floor(Math.random() * 0x7fffffff), tune: ArcadeTune = NORMAL_TUNE) {
     this.rng = createRng(seed);
+    this.tune = tune;
+    this.lives = Math.max(1, STARS.lives + tune.lives);
   }
 
   get multiplier(): number {
@@ -154,7 +158,7 @@ export class StarCatch implements ArcadeGame {
     const room = this.stars.length < Math.round(lerpRange(STARS.maxStars, k));
     if (t >= this.nextSpawnAt && room && t < STARS.durationMs - STARS.quietEndMs) {
       this.spawn(body, hands, input.aspect, k);
-      this.nextSpawnAt = t + lerpRange(STARS.spawnEveryMs, k);
+      this.nextSpawnAt = t + lerpRange(STARS.spawnEveryMs, k) / this.tune.pace;
     }
 
     this.pops = this.pops.filter((p) => t - p.at < 900);
@@ -214,7 +218,7 @@ export class StarCatch implements ArcadeGame {
     this.bestCombo = Math.max(this.bestCombo, this.combo);
     this.caught++;
     if (quick) this.quick++;
-    const points = (STARS.points.star + (quick ? STARS.points.quick : 0)) * this.multiplier;
+    const points = Math.round((STARS.points.star + (quick ? STARS.points.quick : 0)) * this.tune.score) * this.multiplier;
     this.score += points;
     this.pops.push({ id: star.id, x: star.x, y: star.y, r: star.r, at: this.time, kind: quick ? 'quick' : 'caught', points });
     sounds.push(quick ? 'perfect' : 'orb');
@@ -237,8 +241,9 @@ export class StarCatch implements ArcadeGame {
       if (clearOfStars && clearOfHands) break;
     }
     if (!spot) return;
-    const bomb = this.rng() < lerpRange(STARS.bombChance, k);
-    this.stars.push({ id: this.nextId++, x: spot.x, y: spot.y, r, hitR, bornAt: this.time, ttl: lerpRange(STARS.ttlMs, k), bomb, closest: Infinity });
+    const bomb = this.rng() < Math.min(0.4, lerpRange(STARS.bombChance, k) * this.tune.pace);
+    const ttl = lerpRange(STARS.ttlMs, k) / this.tune.pace;
+    this.stars.push({ id: this.nextId++, x: spot.x, y: spot.y, r, hitR, bornAt: this.time, ttl, bomb, closest: Infinity });
   }
 
   private toast(text: string, tone: Tone): void {

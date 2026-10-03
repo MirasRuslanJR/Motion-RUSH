@@ -2,7 +2,7 @@ import type { SfxName } from '../../lib/audio/sfx';
 import { armAngles, danceHint, DANCE_POSES, poseMatch, type DancePose } from '../dance/dance';
 import { createRng } from '../gameplay/course';
 import { copyPoseInto, createPose, LM, lm, type Pose } from '../tracking/landmarks';
-import { bodyOf, clock, lerpRange, type ArcadeGame, type ArcadeHud, type ArcadeInput, type ArcadeResult, type Tone } from './types';
+import { bodyOf, clock, lerpRange, NORMAL_TUNE, type ArcadeGame, type ArcadeHud, type ArcadeInput, type ArcadeResult, type ArcadeTune, type Tone } from './types';
 
 /** Freeze! tuning. Motion is measured in shoulder widths per second (SW/s). */
 export const FREEZE = {
@@ -157,8 +157,21 @@ export class FreezeGame implements ArcadeGame {
   private toastState: ArcadeHud['toast'] = null;
   private toastId = 0;
 
-  constructor(seed = Math.floor(Math.random() * 0x7fffffff)) {
+  private readonly tune: ArcadeTune;
+
+  constructor(seed = Math.floor(Math.random() * 0x7fffffff), tune: ArcadeTune = NORMAL_TUNE) {
     this.rng = createRng(seed);
+    this.tune = tune;
+    this.lives = Math.max(1, FREEZE.lives + tune.lives);
+  }
+
+  /** Harder levels: less time to strike the pose and a stricter stillness limit. */
+  private get freezeLimit(): number {
+    return FREEZE.freezeLimit / this.tune.pace;
+  }
+
+  private get figureGrace(): number {
+    return FREEZE.figureGraceMs / this.tune.pace;
   }
 
   update(input: ArcadeInput, dtMs: number): SfxName[] {
@@ -203,13 +216,13 @@ export class FreezeGame implements ArcadeGame {
       this.distance = Math.min(FREEZE.finishM, this.distance + (speed * dtMs) / 1000);
       if (this.distance >= FREEZE.finishM) this.finish(sounds);
     } else if (this.light === 'red' && !this.caughtThisRed && t >= this.breakUntil) {
-      const grace = this.figure ? FREEZE.figureGraceMs : FREEZE.graceMs;
+      const grace = this.figure ? this.figureGrace : FREEZE.graceMs / this.tune.pace;
       if (t - this.redStartedAt >= grace) {
         if (this.figure) {
           this.matchSum += this.figureMatch * dtMs;
           this.matchMs += dtMs;
         }
-        this.movingFor = this.energy > FREEZE.freezeLimit ? this.movingFor + dtMs : Math.max(0, this.movingFor - dtMs * 2);
+        this.movingFor = this.energy > this.freezeLimit ? this.movingFor + dtMs : Math.max(0, this.movingFor - dtMs * 2);
         if (this.movingFor >= FREEZE.caughtAfterMs) this.catchPlayer(t, sounds);
       }
     }
@@ -218,7 +231,8 @@ export class FreezeGame implements ArcadeGame {
 
   get score(): number {
     const base = Math.round(this.distance * 10) + this.bonus;
-    return this.finished ? base + 1000 + this.lives * 300 + Math.max(0, Math.round((90000 - this.time) / 100)) : base;
+    const raw = this.finished ? base + 1000 + this.lives * 300 + Math.max(0, Math.round((90000 - this.time) / 100)) : base;
+    return Math.round(raw * this.tune.score);
   }
 
   hud(): ArcadeHud {
@@ -236,7 +250,7 @@ export class FreezeGame implements ArcadeGame {
         break;
       case 'red': {
         // While the figure is being struck, the dance-floor hint says which arm to fix.
-        const striking = f !== null && this.time - this.redStartedAt < FREEZE.figureGraceMs;
+        const striking = f !== null && this.time - this.redStartedAt < this.figureGrace;
         const sub = striking
           ? this.figureHint.startsWith('Точно')
             ? 'Точно! Теперь не шевелись'
@@ -258,7 +272,7 @@ export class FreezeGame implements ArcadeGame {
       cue,
       toast: this.toastState,
       meter: red
-        ? { value: Math.min(1, this.energy / (FREEZE.freezeLimit * 1.5)), mark: 1 / 1.5, label: 'Движение', danger: this.energy > FREEZE.freezeLimit }
+        ? { value: Math.min(1, this.energy / (this.freezeLimit * 1.5)), mark: 1 / 1.5, label: 'Движение', danger: this.energy > this.freezeLimit }
         : this.light === 'green' || this.light === 'yellow'
           ? { value: Math.min(1, this.energy / FREEZE.runEnergy), mark: null, label: 'Скорость', danger: false }
           : null,
@@ -361,10 +375,10 @@ export class FreezeGame implements ArcadeGame {
     this.movingFor = 0;
     switch (light) {
       case 'yellow':
-        this.lightEndsAt = t + FREEZE.yellowMs;
+        this.lightEndsAt = t + FREEZE.yellowMs / this.tune.pace;
         // The first red is a plain freeze; later ones call a figure, and some yellows are a trick.
         this.figure = this.redsCalled === 0 ? null : this.pickFigure();
-        this.fakeOut = this.redsCalled > 0 && this.rng() < FREEZE.fakeChance;
+        this.fakeOut = this.redsCalled > 0 && this.rng() < Math.min(0.4, FREEZE.fakeChance * this.tune.pace);
         break;
       case 'red':
         this.redStartedAt = t;

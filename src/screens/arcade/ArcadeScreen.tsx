@@ -5,15 +5,16 @@ import { HoldGesture } from '../../components/HoldGesture';
 import { Icon } from '../../components/Icon';
 import { ModeIcon } from '../../components/ModeIcon';
 import { PoseGlyph } from '../../components/PoseGlyph';
-import { FREEZE, FreezeGame } from '../../features/arcade/freeze';
+import { FreezeGame } from '../../features/arcade/freeze';
 import { ReactionGame } from '../../features/arcade/reaction';
 import { SquatGame } from '../../features/arcade/squats';
-import { StarCatch, STARS } from '../../features/arcade/starCatch';
-import type { ArcadeGame, ArcadeHud, ArcadeResult } from '../../features/arcade/types';
+import { StarCatch } from '../../features/arcade/starCatch';
+import type { ArcadeGame, ArcadeHud, ArcadeResult, ArcadeTune } from '../../features/arcade/types';
 import type { MotionEngine } from '../../features/engine/MotionEngine';
 import { isErrorVerdict } from '../../features/gestures/ErrorDiagnosisEngine';
 import { motionMeta, type ControlScheme, type GestureEvent } from '../../features/gestures/types';
-import type { ArcadeKind, GameModeDef } from '../../features/modes/modes';
+import { arcadeTune, type Difficulty } from '../../features/modes/difficulty';
+import { effectiveDifficulty, supportsDifficulty, type ArcadeKind, type GameModeDef } from '../../features/modes/modes';
 import { ArcadeRenderer } from '../../features/render/ArcadeRenderer';
 import { useEngineFrame, useGestureEvents } from '../../hooks/useEngine';
 import { RunnerMusic } from '../../lib/audio/runnerMusic';
@@ -31,6 +32,7 @@ export interface ArcadeRunResult {
 interface ArcadeScreenProps {
   engine: MotionEngine;
   mode: GameModeDef;
+  difficulty: Difficulty;
   profile: Profile;
   onRecord: (run: ArcadeRunResult) => RecordedSession | null;
   onAgain: () => void;
@@ -65,12 +67,12 @@ const MUSIC: Record<ArcadeKind, boolean> = { stars: true, freeze: true, reaction
 const TOAST_MS = 2200;
 const COUNTDOWN_STEP_MS = 700;
 
-function createGame(kind: ArcadeKind, scheme: ControlScheme): ArcadeGame {
+function createGame(kind: ArcadeKind, scheme: ControlScheme, tune: ArcadeTune): ArcadeGame {
   switch (kind) {
     case 'stars':
-      return new StarCatch();
+      return new StarCatch(undefined, tune);
     case 'freeze':
-      return new FreezeGame();
+      return new FreezeGame(undefined, tune);
     case 'reaction':
       return new ReactionGame((move) => motionMeta(move, scheme).title);
     case 'squats':
@@ -85,10 +87,6 @@ function formatScore(kind: ArcadeKind, score: number): string {
   return score.toLocaleString('ru-RU');
 }
 
-function maxLives(kind: ArcadeKind): number {
-  return kind === 'stars' ? STARS.lives : kind === 'freeze' ? FREEZE.lives : 0;
-}
-
 type Stage = 'intro' | 'countdown' | 'playing' | 'done';
 
 /**
@@ -96,9 +94,12 @@ type Stage = 'intro' | 'countdown' | 'playing' | 'done';
  * draws on top of it, the HUD and the cue are DOM. Intro → stand in view →
  * 3-2-1 → play → result with this device's record.
  */
-export function ArcadeScreen({ engine, mode, profile, onRecord, onAgain, onModes }: ArcadeScreenProps) {
+export function ArcadeScreen({ engine, mode, difficulty, profile, onRecord, onAgain, onModes }: ArcadeScreenProps) {
   const kind: ArcadeKind = mode.arcade ?? 'stars';
-  const [game] = useState(() => createGame(kind, engine.ui.get().scheme));
+  const [level] = useState(() => effectiveDifficulty(mode, difficulty));
+  const [game] = useState(() => createGame(kind, engine.ui.get().scheme, arcadeTune(level)));
+  /** Lives at the start of the round (the difficulty may add or take one). */
+  const [lives] = useState(() => game.hud().lives ?? 0);
   const [best] = useState(() => bestFor(profile, mode.id));
   const [music] = useState(() => new RunnerMusic());
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -230,7 +231,6 @@ export function ArcadeScreen({ engine, mode, profile, onRecord, onAgain, onModes
 
   const playing = stage === 'playing';
   const cue = playing ? hud.cue : null;
-  const lives = maxLives(kind);
   /** The record after this run (the side panel), or the one this screen opened with. */
   const record = recorded ? bestFor(recorded.profile, mode.id) : best;
 
@@ -347,7 +347,10 @@ export function ArcadeScreen({ engine, mode, profile, onRecord, onAgain, onModes
               <span className="arcade__badge-icon">
                 <ModeIcon name={mode.icon} size={40} />
               </span>
-              <p className="t-label">{mode.badge}</p>
+              <p className="t-label">
+                {mode.badge}
+                {supportsDifficulty(mode) && ` · ${level.title}`}
+              </p>
               <h2 className="t-headline">{mode.title}</h2>
               <p className="overlay__message">{mode.tagline}</p>
               <p className="arcade__wait">Встань в кадр — игра начнётся сама</p>
@@ -385,7 +388,7 @@ export function ArcadeScreen({ engine, mode, profile, onRecord, onAgain, onModes
             <div className="arcade__actions">
               <HoldGesture engine={engine} label="Ещё раз" onConfirm={onAgain} />
               <button type="button" className="btn btn--ghost btn--small" onClick={onModes}>
-                <Icon name="left" size={16} /> Режимы
+                <Icon name="left" size={16} /> Меню
               </button>
             </div>
           </motion.div>
@@ -414,7 +417,7 @@ export function ArcadeScreen({ engine, mode, profile, onRecord, onAgain, onModes
           Рекорд на этом устройстве: <strong>{record > 0 ? formatScore(kind, record) : '—'}</strong>
         </p>
         <button type="button" className="btn btn--ghost btn--small arcade__exit" onClick={onModes}>
-          <Icon name="left" size={16} /> Другой режим
+          <Icon name="left" size={16} /> В меню
         </button>
       </aside>
     </main>

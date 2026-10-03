@@ -12,7 +12,8 @@ import type { Diagnosis } from '../../features/gestures/ErrorDiagnosisEngine';
 import { motionMeta, type ControlScheme, type ExpectedMotion, type GestureType } from '../../features/gestures/types';
 import { GameEngine, type GameEvent, type PlayerInput } from '../../features/gameplay/GameEngine';
 import { isPickup, OBSTACLE_REQUIREMENT, type GameOutcome, type Lane, type SessionResult } from '../../features/gameplay/types';
-import { courseForMode, rulesForMode, timingForRecognition, type GameModeDef } from '../../features/modes/modes';
+import type { Difficulty } from '../../features/modes/difficulty';
+import { courseForMode, effectiveDifficulty, rulesForMode, supportsDifficulty, timingForRecognition, widestTiming, type GameModeDef } from '../../features/modes/modes';
 import { computeSessionStats } from '../../features/results/sessionStats';
 import type { DuelRoom } from '../../features/online/DuelRoom';
 import { GameRenderer } from '../../features/render/GameRenderer';
@@ -183,6 +184,7 @@ function OpponentPanel({ room, score }: { room: DuelRoom; score: number }) {
 interface GameScreenProps {
   engine: MotionEngine;
   mode: GameModeDef;
+  difficulty: Difficulty;
   /** Course seed from the online room (duel). */
   sharedSeed?: number | null;
   duel?: DuelRoom | null;
@@ -190,14 +192,16 @@ interface GameScreenProps {
 }
 
 /** One run of the game. The parent re-mounts it (via `key`) for every new run. */
-export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFinish }: GameScreenProps) {
+export function GameScreen({ engine, mode, difficulty, sharedSeed = null, duel = null, onFinish }: GameScreenProps) {
   const [scheme] = useState<ControlScheme>(() => engine.ui.get().scheme);
+  const [level] = useState(() => effectiveDifficulty(mode, difficulty));
   const [game] = useState(() => {
-    const rules = rulesForMode(mode, scheme);
+    const rules = rulesForMode(mode, scheme, level.id);
     // A slow device (or a video call alongside) registers moves later: wider windows then.
-    const timing = rules.timing ?? timingForRecognition(engine.frame.stats.inferenceFps);
-    return new GameEngine(courseForMode(mode, sharedSeed ?? undefined), undefined, { ...rules, timing });
+    const timing = widestTiming(rules.timing, timingForRecognition(engine.frame.stats.inferenceFps));
+    return new GameEngine(courseForMode(mode, sharedSeed ?? undefined, level.id), undefined, { ...rules, timing });
   });
+  const lives = game.rules.energy;
   const lastSentRef = useRef(Number.NEGATIVE_INFINITY);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const backgroundRef = useRef<HTMLCanvasElement>(null);
@@ -352,7 +356,10 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
         <div className="hud">
           <div className="hud__top">
             <div className="hud__score">
-              <span className="t-label">{mode.title}</span>
+              <span className="t-label">
+                {mode.title}
+                {supportsDifficulty(mode) && ` · ${level.title}`}
+              </span>
               <RollingNumber value={hud.score} className="hud__score-value" />
               {hud.multiplier > 1 && <span className={`hud__multi ${hud.boosted ? 'is-boost' : ''}`}>×{hud.multiplier}</span>}
             </div>
@@ -366,8 +373,8 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
               {mode.practice ? (
                 <span className="t-label hud__practice">Без штрафов</span>
               ) : (
-                <div className="hud__energy" role="img" aria-label={`Энергия: ${hud.energy} из ${mode.energy}`}>
-                  {Array.from({ length: mode.energy }, (_, i) => (
+                <div className="hud__energy" role="img" aria-label={`Энергия: ${hud.energy} из ${lives}`}>
+                  {Array.from({ length: lives }, (_, i) => (
                     <span key={i} className={`hud__cell ${i < hud.energy ? 'is-full' : ''}`} />
                   ))}
                 </div>
@@ -475,7 +482,7 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ type: 'spring', stiffness: 200, damping: 16, delay: 0.1 }}
               >
-                {hud.outcome === 'complete' ? 'Трасса пройдена!' : mode.energy === 1 ? 'Игра окончена' : 'Энергия закончилась'}
+                {hud.outcome === 'complete' ? 'Трасса пройдена!' : lives === 1 ? 'Игра окончена' : 'Энергия закончилась'}
               </motion.h2>
             </motion.div>
           )}

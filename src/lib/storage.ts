@@ -1,4 +1,5 @@
 import type { GameOutcome } from '../features/gameplay/types';
+import { DEFAULT_DIFFICULTY, isDifficulty, type Difficulty } from '../features/modes/difficulty';
 
 const KEY = 'motion-rush:v1';
 const LEADERBOARD_SIZE = 8;
@@ -26,6 +27,8 @@ export interface Profile {
   nickname: string;
   /** Random id for online presence (not personal data). */
   playerId: string;
+  /** Last difficulty picked in the menu. */
+  difficulty: Difficulty;
 }
 
 function randomId(): string {
@@ -44,6 +47,7 @@ const EMPTY = (): Profile => ({
   muted: false,
   nickname: '',
   playerId: randomId(),
+  difficulty: DEFAULT_DIFFICULTY,
 });
 
 /** localStorage can throw (private mode, blocked storage) — the app must still work. */
@@ -57,6 +61,7 @@ export function loadProfile(): Profile {
     }
     const parsed = JSON.parse(raw) as Partial<Profile> & { leaderboard?: LeaderboardEntry[] };
     const profile: Profile = { ...EMPTY(), ...parsed, leaderboards: { ...(parsed.leaderboards ?? {}) } };
+    if (!isDifficulty(profile.difficulty)) profile.difficulty = DEFAULT_DIFFICULTY;
     // v1 kept one list — it belongs to the classic mode.
     if (parsed.leaderboard && !profile.leaderboards.classic) profile.leaderboards.classic = parsed.leaderboard;
     if (!parsed.playerId) saveProfile(profile);
@@ -111,6 +116,12 @@ export function recordSession(mode: string, entry: LeaderboardEntry, { countsFor
 
 export function saveMuted(muted: boolean): void {
   saveProfile({ ...loadProfile(), muted });
+}
+
+export function saveDifficulty(difficulty: Difficulty): Profile {
+  const next = { ...loadProfile(), difficulty };
+  saveProfile(next);
+  return next;
 }
 
 /** 2–20 visible characters; trimmed. */

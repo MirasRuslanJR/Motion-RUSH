@@ -11,12 +11,15 @@ import {
   danceHint,
   DANCE_CONFIG,
   DANCE_POSES,
-  generateChoreography,
   poseMatch,
   type BodyOffset,
   type DanceInput,
   type DancePose,
 } from './dance';
+import { scriptedChoreography, sectionAt, SONG_BEATS, SONG_SECTIONS } from './choreography';
+import type { Difficulty } from '../modes/difficulty';
+
+const LEVELS: Difficulty[] = ['easy', 'normal', 'hard', 'expert'];
 
 /** Mirrored-frame pose with both arms pointing at the given angles (0 down, 90 out, 180 up). */
 function poseWithArms(left: number, right: number): Pose {
@@ -146,33 +149,57 @@ describe('dance floor', () => {
     expect(danceHint({ ...armAngles(poseWithArms(0, 0)), body: still }, byId('JUMP_V'))).toBe('Подпрыгни на бит и руки как на карточке');
   });
 
-  it('builds a random choreography on the beat, never repeating a pose twice in a row', () => {
-    const a = generateChoreography(1);
-    expect(a).toEqual(generateChoreography(1));
-    expect(a).not.toEqual(generateChoreography(2));
-    expect(a.length).toBeGreaterThan(40);
-    for (let i = 1; i < a.length; i++) {
-      expect(a[i]?.pose.id).not.toBe(a[i - 1]?.pose.id);
-      expect(a[i]?.at).toBe((a[i]?.beat ?? 0) * BEAT_MS);
-      expect((a[i]?.at ?? 0) - (a[i - 1]?.at ?? 0)).toBeGreaterThanOrEqual(2 * BEAT_MS);
+  it('dances a written choreography: the same moves every time, on the beat, inside the song', () => {
+    for (const level of LEVELS) {
+      const a = scriptedChoreography(level);
+      expect(a).toEqual(scriptedChoreography(level));
+      for (let i = 0; i < a.length; i++) {
+        const m = a[i];
+        expect(m?.id).toBe(i);
+        expect(m?.at).toBe((m?.beat ?? 0) * BEAT_MS);
+        expect(m?.beat ?? 0).toBeLessThan(SONG_BEATS);
+        // After the 4-3-2-1 count.
+        expect(m?.beat ?? 0).toBeGreaterThanOrEqual(8);
+        if (i > 0) expect((m?.beat ?? 0) - (a[i - 1]?.beat ?? 0)).toBeGreaterThanOrEqual(level === 'easy' ? 2 : 1);
+      }
     }
   });
 
-  it('mixes whole-body moves into the dance: squats, jumps and steps to both sides in turn', () => {
-    for (const seed of [1, 5, 9]) {
-      const a = generateChoreography(seed);
+  it('follows the song: arms in the verse, a squat before the drop and a jump right on it', () => {
+    for (const level of LEVELS) {
+      const a = scriptedChoreography(level);
+      for (const m of a.filter((x) => sectionAt(x.beat).kind === 'verse' && sectionAt(x.beat).from === 16)) expect(m.pose.body).toBeUndefined();
+      for (const drop of SONG_SECTIONS.filter((s) => s.kind === 'drop')) {
+        const onDrop = a.find((m) => m.beat === drop.from);
+        expect(onDrop?.pose.body).toBe('jump');
+        const before = a.filter((m) => m.beat < drop.from).at(-1);
+        expect(before?.pose.body).toBe('squat');
+      }
+      expect(a.at(-1)?.pose.id).toBe('V');
+    }
+  });
+
+  it('harder levels dance more moves, all of them use the whole body, and steps go left and right in turn', () => {
+    const counts = LEVELS.map((l) => scriptedChoreography(l).length);
+    for (let i = 1; i < counts.length; i++) expect(counts[i] ?? 0).toBeGreaterThan(counts[i - 1] ?? 0);
+    for (const level of LEVELS) {
+      const a = scriptedChoreography(level);
       const body = a.filter((m) => m.pose.body);
-      expect(body.length / a.length).toBeGreaterThan(0.35);
+      expect(body.length / a.length).toBeGreaterThan(0.3);
       expect(new Set(body.map((m) => m.pose.body))).toEqual(new Set(['squat', 'jump', 'step-left', 'step-right']));
-      // A calm start: the first moves use the arms only.
-      expect(a.slice(0, 2).every((m) => !m.pose.body)).toBe(true);
       const steps = body.filter((m) => m.pose.body?.startsWith('step')).map((m) => m.pose.body);
       for (let i = 1; i < steps.length; i++) expect(steps[i]).not.toBe(steps[i - 1]);
     }
   });
 
+  it('a wider tolerance on easier levels forgives a sloppier pose', () => {
+    const t = byId('T');
+    const sloppy = armAngles(poseWithArms(90 + 38, 90 - 38));
+    expect(poseMatch(sloppy, t, 1.3)).toBeGreaterThan(poseMatch(sloppy, t));
+    expect(poseMatch(sloppy, t, 0.78)).toBeLessThan(poseMatch(sloppy, t));
+  });
   it('judges two dancers independently: exact moves are PERFECT, standing still is a MISS', () => {
-    const moves = generateChoreography(7);
+    const moves = scriptedChoreography('expert');
     const dance = new DanceEngine(moves, 2);
     for (let t = 0; t <= dance.duration; t += 16) {
       const move = dance.current;
@@ -190,7 +217,7 @@ describe('dance floor', () => {
   });
 
   it('only a pose held around the beat counts', () => {
-    const moves = generateChoreography(3).slice(0, 1);
+    const moves = scriptedChoreography('normal').slice(0, 1);
     const move = moves[0];
     if (!move) throw new Error('no move');
     const dance = new DanceEngine(moves, 1);

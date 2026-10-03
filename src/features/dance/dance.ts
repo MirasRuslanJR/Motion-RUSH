@@ -1,5 +1,4 @@
 import { clamp } from '../../lib/math/geometry';
-import { createRng } from '../gameplay/course';
 import { LM, lm, type Pose } from '../tracking/landmarks';
 
 /**
@@ -47,8 +46,8 @@ export const DANCE_POSES: readonly DancePose[] = [
 
 export const DANCE_CONFIG = {
   bpm: 120,
-  /** Beats in the song (64 s at 120 bpm). */
-  beats: 128,
+  /** Beats in the song (72 s at 120 bpm); its parts and moves are in choreography.ts. */
+  beats: 144,
   /** A card is visible this long before its beat. */
   leadMs: 3000,
   /** The pose is judged by the best match inside [beat - early, beat + late]. */
@@ -120,9 +119,11 @@ export function angleDiff(a: number, b: number): number {
   return Math.abs((((a - b) % 360) + 540) % 360 - 180);
 }
 
-function armScore(actual: number, target: number): number {
-  const c = DANCE_CONFIG;
-  return clamp(1 - (angleDiff(actual, target) - c.exactDeg) / (c.zeroDeg - c.exactDeg), 0, 1);
+/** A tolerance above 1 forgives more (easier levels), below 1 asks for a cleaner pose. */
+function armScore(actual: number, target: number, tolerance = 1): number {
+  const exact = DANCE_CONFIG.exactDeg * tolerance;
+  const zero = DANCE_CONFIG.zeroDeg * tolerance;
+  return clamp(1 - (angleDiff(actual, target) - exact) / (zero - exact), 0, 1);
 }
 
 function ramp(value: number, from: number, full: number): number {
@@ -130,30 +131,31 @@ function ramp(value: number, from: number, full: number): number {
 }
 
 /** 0..1: how far the body went into a squat, a jump or a step. */
-export function bodyScore(body: DanceBody, offset: BodyOffset | null | undefined): number {
+export function bodyScore(body: DanceBody, offset: BodyOffset | null | undefined, tolerance = 1): number {
   if (!offset) return 0;
   const c = DANCE_CONFIG.body;
+  const k = 1 / tolerance;
   switch (body) {
     case 'squat':
-      return ramp(offset.y, c.squatFrom, c.squat);
+      return ramp(offset.y, c.squatFrom * k, c.squat * k);
     case 'jump':
-      return ramp(-offset.y, c.jumpFrom, c.jump);
+      return ramp(-offset.y, c.jumpFrom * k, c.jump * k);
     case 'step-left':
-      return ramp(-offset.x, c.stepFrom, c.step);
+      return ramp(-offset.x, c.stepFrom * k, c.step * k);
     case 'step-right':
-      return ramp(offset.x, c.stepFrom, c.step);
+      return ramp(offset.x, c.stepFrom * k, c.step * k);
   }
 }
 
 /** 0..1: how well the dancer matches the move. A whole-body move is half arms, half body. */
-export function poseMatch(input: DanceInput, pose: DancePose): number {
-  const arms = (armScore(input.left, pose.left) + armScore(input.right, pose.right)) / 2;
-  return pose.body ? (arms + bodyScore(pose.body, input.body)) / 2 : arms;
+export function poseMatch(input: DanceInput, pose: DancePose, tolerance = 1): number {
+  const arms = (armScore(input.left, pose.left, tolerance) + armScore(input.right, pose.right, tolerance)) / 2;
+  return pose.body ? (arms + bodyScore(pose.body, input.body, tolerance)) / 2 : arms;
 }
 
 /** What the body still has to do for the move, or null when it is done. */
-function bodyFix(body: DanceBody, offset: BodyOffset | null | undefined): string | null {
-  if (bodyScore(body, offset) >= 0.85) return null;
+function bodyFix(body: DanceBody, offset: BodyOffset | null | undefined, tolerance: number): string | null {
+  if (bodyScore(body, offset, tolerance) >= 0.85) return null;
   const c = DANCE_CONFIG.body;
   const o = offset ?? { x: 0, y: 0 };
   switch (body) {
@@ -172,19 +174,19 @@ function bodyFix(body: DanceBody, offset: BodyOffset | null | undefined): string
  * Error mode for the dance floor: what the body still has to do and which arm is off.
  * "Higher" = towards 180° (up), "lower" = towards 0° (down).
  */
-export function danceHint(input: DanceInput | null, pose: DancePose): string {
+export function danceHint(input: DanceInput | null, pose: DancePose, tolerance = 1): string {
   if (!input) return 'Встань в кадр — тебя не видно';
   if (!input.visible) return 'Руки не видно — отойди на шаг назад';
   const fix = (side: 'Левую' | 'Правую', actual: number, target: number): string | null => {
     const diff = angleDiff(actual, target);
-    if (diff <= DANCE_CONFIG.exactDeg + 8) return null;
+    if (diff <= DANCE_CONFIG.exactDeg * tolerance + 8) return null;
     if (actual < 0 && target > 20) return `${side} руку — в сторону, не перед собой`;
     return actual < target ? `${side} руку выше` : `${side} руку ниже`;
   };
   const l = fix('Левую', input.left, pose.left);
   const r = fix('Правую', input.right, pose.right);
   const arms = l && r ? `${l}, ${r.toLowerCase()}` : (l ?? r);
-  const body = pose.body ? bodyFix(pose.body, input.body) : null;
+  const body = pose.body ? bodyFix(pose.body, input.body, tolerance) : null;
   if (!arms && !body) return 'Точно! Держи позу на бит';
   // The body first; with both arms off too, one short line instead of three instructions.
   if (body && arms) return l && r ? `${body} и руки как на карточке` : `${body}, ${arms.toLowerCase()}`;
@@ -235,39 +237,6 @@ export interface DanceMove {
   at: number;
 }
 
-const ARM_POSES = DANCE_POSES.filter((p) => !p.body);
-const BODY_POSES = DANCE_POSES.filter((p) => p.body);
-
-/**
- * Random choreography: a calm arms-only start (a move every 2 bars), then a move every
- * 2 beats where every other move uses the whole body. Never the same move twice in a row,
- * never the same body move twice in a row, and steps go left and right in turn.
- */
-export function generateChoreography(seed: number): DanceMove[] {
-  const rng = createRng(seed);
-  const moves: DanceMove[] = [];
-  let prev: DancePose | null = null;
-  let prevBody: DanceBody | null = null;
-  let lastStep: DanceBody | null = null;
-  const beats: number[] = [];
-  for (let b = 8; b < 40; b += 4) beats.push(b);
-  for (let b = 40; b < 88; b += 2) beats.push(b);
-  for (let b = 88; b < DANCE_CONFIG.beats - 4; b += 2) beats.push(b);
-  beats.forEach((beat, i) => {
-    const whole = beat >= 16 && (i % 2 === 1 || rng() < 0.2);
-    const pool = whole
-      ? BODY_POSES.filter((p) => p.body !== prevBody && !(p.body?.startsWith('step') && p.body === lastStep))
-      : ARM_POSES.filter((p) => p !== prev);
-    const options = pool.length > 0 ? pool : ARM_POSES.filter((p) => p !== prev);
-    const pose = options[Math.floor(rng() * options.length)] ?? (DANCE_POSES[0] as DancePose);
-    prev = pose;
-    prevBody = pose.body ?? null;
-    if (pose.body?.startsWith('step')) lastStep = pose.body;
-    moves.push({ id: moves.length, pose, beat, at: beat * BEAT_MS });
-  });
-  return moves;
-}
-
 export type DanceGrade = 'perfect' | 'good' | 'miss';
 
 export interface DancerState {
@@ -292,6 +261,15 @@ export interface DanceJudgement {
 
 const emptyDancer = (): DancerState => ({ score: 0, combo: 0, bestCombo: 0, perfect: 0, good: 0, miss: 0, perPose: {} });
 
+/** Difficulty of the dance floor: judging window, pose tolerance and what a point is worth. */
+export interface DanceTune {
+  window: number;
+  tolerance: number;
+  score: number;
+}
+
+export const NORMAL_DANCE: DanceTune = { window: 1, tolerance: 1, score: 1 };
+
 /**
  * Deterministic dance logic: song time + per-player arms and body in, judgements out.
  * Each move is judged by the best match a player reaches around its beat.
@@ -300,11 +278,13 @@ export class DanceEngine {
   readonly moves: DanceMove[];
   readonly dancers: DancerState[];
   readonly duration: number;
+  readonly tune: DanceTune;
   private next = 0;
   private readonly best: number[];
 
-  constructor(moves: DanceMove[], players: number) {
+  constructor(moves: DanceMove[], players: number, tune: DanceTune = NORMAL_DANCE) {
     this.moves = moves;
+    this.tune = tune;
     this.dancers = Array.from({ length: players }, emptyDancer);
     this.best = Array.from({ length: players }, () => 0);
     const last = moves[moves.length - 1];
@@ -327,16 +307,16 @@ export class DanceEngine {
 
   update(time: number, inputs: readonly (DanceInput | null)[]): DanceJudgement[] {
     const out: DanceJudgement[] = [];
-    const c = DANCE_CONFIG;
+    const { window: span, tolerance } = this.tune;
     for (;;) {
       const move = this.moves[this.next];
       if (!move) break;
-      if (time >= move.at - c.earlyMs) {
+      if (time >= move.at - DANCE_CONFIG.earlyMs * span) {
         inputs.forEach((a, i) => {
-          if (a?.visible) this.best[i] = Math.max(this.best[i] ?? 0, poseMatch(a, move.pose));
+          if (a?.visible) this.best[i] = Math.max(this.best[i] ?? 0, poseMatch(a, move.pose, tolerance));
         });
       }
-      if (time < move.at + c.lateMs) break;
+      if (time < move.at + DANCE_CONFIG.lateMs * span) break;
       this.dancers.forEach((d, i) => out.push(this.judge(i, d, move, this.best[i] ?? 0)));
       this.best.fill(0);
       this.next++;
@@ -357,7 +337,7 @@ export class DanceEngine {
       stat.hits++;
       d.combo++;
       d.bestCombo = Math.max(d.bestCombo, d.combo);
-      points = (grade === 'perfect' ? c.points.perfect : c.points.good) * this.multiplier(player);
+      points = Math.round((grade === 'perfect' ? c.points.perfect : c.points.good) * this.tune.score) * this.multiplier(player);
       d.score += points;
       if (grade === 'perfect') d.perfect++;
       else d.good++;
