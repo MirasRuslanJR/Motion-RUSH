@@ -150,15 +150,21 @@ export function MenuScreen({ engine, ready, profile, lastMode, invite, muted, on
   // Menu music: starts now if sound is already unlocked, otherwise on the first click or key.
   const [music] = useState(() => new MenuMusic());
   useEffect(() => {
+    let alive = true;
+    let timer = 0;
     const begin = () => {
       sfx.unlock();
-      // The audio context resumes asynchronously after the unlock.
-      window.setTimeout(() => music.start(), 60);
+      // The audio context resumes asynchronously after the unlock; the menu may be gone by then.
+      timer = window.setTimeout(() => {
+        if (alive) music.start();
+      }, 60);
     };
     music.start();
     window.addEventListener('pointerdown', begin, { once: true });
     window.addEventListener('keydown', begin, { once: true });
     return () => {
+      alive = false;
+      window.clearTimeout(timer);
       window.removeEventListener('pointerdown', begin);
       window.removeEventListener('keydown', begin);
       music.stop();
