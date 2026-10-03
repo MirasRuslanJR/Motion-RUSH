@@ -37,6 +37,10 @@ Admit Hackathon 2026 · кейс «Motion — камера вместо джой
 | ![Dance](docs/screenshots/dance.jpg) | ![Dance battle](docs/screenshots/dance-battle.jpg) |
 | **Игра вдвоём: у каждого своя зона, игра подсказывает, куда сдвинуться** | **Versus 2P: у каждого своя трасса, полосу меняет наклон** |
 | ![Versus setup](docs/screenshots/versus-setup.jpg) | ![Versus](docs/screenshots/versus.jpg) |
+| **Star Catch: лови звёзды руками; «Почти!» — подсказка, если рука не дотянулась** | **Freeze!: на красный — замри; камера видит даже взмах руки** |
+| ![Star Catch](docs/screenshots/star-catch.jpg) | ![Freeze](docs/screenshots/freeze.jpg) |
+
+![«Рентген»: скорость распознавания, значения против порогов и сработавшее правило](docs/screenshots/xray.jpg)
 
 ![Результаты, посчитанные из реального забега](docs/screenshots/results.jpg)
 > На скриншотах видеослой камеры скрыт: остались только скелет, «призрак» целевой позы и линии-цели, которые рисует система.
