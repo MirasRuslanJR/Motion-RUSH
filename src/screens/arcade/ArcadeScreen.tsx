@@ -353,6 +353,14 @@ export function ArcadeScreen({ engine, mode, difficulty, profile, onRecord, onAg
               </p>
               <h2 className="t-headline">{mode.title}</h2>
               <p className="overlay__message">{mode.tagline}</p>
+              {/* Phones: the side panel is hidden, so the rules are here. */}
+              <ol className="arcade__intro-rules">
+                {RULES[kind].map((rule, i) => (
+                  <li key={rule}>
+                    {i + 1}. {rule}
+                  </li>
+                ))}
+              </ol>
               <p className="arcade__wait">Встань в кадр — игра начнётся сама</p>
             </motion.div>
           )}

@@ -9,6 +9,8 @@
 
 .dance__stage {
   position: relative;
+  /* Sizes inside the stage follow the stage (the canvas draws the card timeline at 24% of its height). */
+  container-type: size;
   border-radius: var(--radius-l);
   border: 1px solid var(--line);
   overflow: hidden;
@@ -32,19 +34,33 @@
   flex-direction: column;
 }
 
+/* Scores at the sides, the part of the song in the middle (1P: on the right). */
 .dance__top {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
   gap: 12px;
-  padding: calc(min(24vh, 150px) + 10px) 18px 0;
+  padding: calc(min(24vh, 150px) + 12px) 18px 0;
+  padding-top: calc(min(24cqh, 150px) + 12px);
 }
 
 .dance__score {
   display: grid;
   gap: 2px;
+  grid-row: 1;
+  justify-self: start;
+  padding: 6px 12px 8px;
+  border-radius: 14px;
+  background: rgba(8, 7, 16, 0.72);
 }
 
-.dance__score:nth-child(2) {
+.dance__score--p1 {
+  grid-column: 1;
+}
+
+.dance__score--p2 {
+  grid-column: 3;
+  justify-self: end;
   text-align: right;
 }
 
@@ -60,9 +76,41 @@
 
 .dance__combo {
   font-family: var(--font-ui);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 800;
   color: var(--pc);
+}
+
+.dance__section {
+  grid-row: 1;
+  grid-column: 2;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 6px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 90, 209, 0.4);
+  background: rgba(8, 7, 16, 0.78);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(12px, 1.2vw, 15px);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ff8fd8;
+}
+
+.dance__section span {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--text-3);
+}
+
+/* One dancer: the centre stays free for the PERFECT / MISS pops above the head. */
+.dance--p1 .dance__section {
+  grid-column: 3;
+  justify-self: end;
 }
 
 .dance__progress {
@@ -70,6 +118,7 @@
   left: 0;
   right: 0;
   top: min(24vh, 150px);
+  top: min(24cqh, 150px);
   height: 3px;
   background: rgba(255, 255, 255, 0.08);
 }
@@ -300,16 +349,78 @@
   font-size: 14px;
 }
 
-@media (max-width: 900px) {
+/* Phones: the dance floor takes the whole screen. One dancer sees themselves as the
+   avatar; two dancers keep a camera strip to find their zones. */
+@media (max-width: 900px), (max-height: 500px) {
   .dance {
     grid-template-columns: minmax(0, 1fr);
-    height: auto;
+    grid-template-rows: minmax(0, 1fr);
+    height: calc(100dvh - var(--topbar-h));
+    min-height: 0;
+    padding: 0 8px 8px;
+    gap: 8px;
   }
   .dance__stage {
-    height: 72dvh;
-    min-height: 460px;
+    border-radius: var(--radius-m);
   }
-  .dance__next {
+  .dance--p1 .dance__side,
+  .dance__next,
+  .dance__tip {
     display: none;
+  }
+  .dance--p2 {
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .dance--p2 .dance__camera {
+    width: auto;
+    height: 24dvh;
+    margin: 0 auto;
+  }
+  .dance__top {
+    gap: 8px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .dance__score {
+    padding: 4px 8px 6px;
+  }
+  .dance__score strong {
+    font-size: 24px;
+  }
+  .dance__section {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+  .dance__hints {
+    gap: 6px;
+    padding: 8px;
+  }
+  .dance__hint {
+    padding: 8px 12px;
+    font-size: 15px;
+  }
+  .dance__who-chip,
+  .dance__who-loading {
+    font-size: 14px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .dance--p2 {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .dance--p2 .dance__camera {
+    width: auto;
+    height: auto;
+    max-height: calc(100dvh - var(--topbar-h) - 16px);
+    max-width: 36vw;
+  }
+  .dance__score strong {
+    font-size: 20px;
+  }
+  .dance__hint {
+    font-size: 13px;
+    padding: 6px 10px;
   }
 }

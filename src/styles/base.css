@@ -365,6 +365,31 @@ button {
   .steps {
     display: none;
   }
+  .steps + .icon-btn {
+    margin-left: auto;
+  }
+}
+
+/* Phones (and any short window): a slim top bar, and the game screens fit the
+   window exactly — the stage takes the room, nothing scrolls away mid-game. */
+@media (max-width: 900px), (max-height: 500px) {
+  :root {
+    --topbar-h: 46px;
+  }
+  .brand {
+    font-size: 12px;
+  }
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+  .app--game,
+  .app--dance,
+  .app--arcade,
+  .app--versus {
+    height: 100dvh;
+    overflow: hidden;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

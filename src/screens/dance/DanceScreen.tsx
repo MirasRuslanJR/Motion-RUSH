@@ -272,9 +272,13 @@ export function DanceScreen({ engine, mode, difficulty, profile, onRecord, onPro
         <canvas ref={canvasRef} className="dance__canvas" aria-hidden="true" />
 
         <div className="dance__hud">
+          <div className="dance__progress">
+            <div ref={progressRef} className="dance__progress-fill" />
+          </div>
+          {/* Under the card timeline: scores at the sides, the part of the song between them. */}
           <div className="dance__top">
             {hud.scores.map((s, i) => (
-              <div key={i} className="dance__score" style={{ '--pc': PLAYER_COLORS[i] } as CSSProperties}>
+              <div key={i} className={`dance__score dance__score--p${i + 1}`} style={{ '--pc': PLAYER_COLORS[i] } as CSSProperties}>
                 <span className="t-label">{players === 1 ? mode.title : `Игрок ${i + 1}`}</span>
                 <strong>{s.toLocaleString('ru-RU')}</strong>
                 {(hud.combos[i] ?? 0) >= 3 && (
@@ -284,15 +288,13 @@ export function DanceScreen({ engine, mode, difficulty, profile, onRecord, onPro
                 )}
               </div>
             ))}
+            {hud.section && (
+              <p className="dance__section">
+                {hud.section}
+                <span>{level.title}</span>
+              </p>
+            )}
           </div>
-          <div className="dance__progress">
-            <div ref={progressRef} className="dance__progress-fill" />
-          </div>
-          {hud.section && (
-            <p className="dance__section">
-              {hud.section} <span>· {level.title}</span>
-            </p>
-          )}
           {stage === 'playing' && (
             <div className="dance__hints">
               {hud.hints.map((h, i) =>

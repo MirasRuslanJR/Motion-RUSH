@@ -272,17 +272,31 @@
   color: var(--text-2);
 }
 
-@media (max-width: 700px) {
-  .versus__stages {
-    grid-template-columns: 1fr;
-  }
+/* Phones: both tracks fit the screen — stacked when held upright, side by side sideways. */
+@media (max-width: 900px), (max-height: 500px) {
   .versus {
-    height: auto;
+    height: calc(100dvh - var(--topbar-h));
+    min-height: 0;
+    padding: 0 8px 8px;
+  }
+  .versus__stages {
+    gap: 8px;
   }
   .versus__stage {
-    height: 60dvh;
+    border-radius: var(--radius-m);
+  }
+  .versus__hud {
+    padding: 8px;
+    gap: 6px;
   }
   .versus__players {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (orientation: portrait) and (max-width: 900px) {
+  .versus__stages {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
   }
 }

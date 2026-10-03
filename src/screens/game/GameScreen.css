@@ -422,25 +422,59 @@
   text-transform: uppercase;
 }
 
-/* ── Mobile: scene on top, camera below ── */
-@media (max-width: 900px) {
+/* ── Phones: the scene takes most of the screen, the camera gets a strip ── */
+@media (max-width: 900px), (max-height: 500px) {
   .game {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1.4fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 2.3fr) minmax(0, 1fr);
     height: calc(100dvh - var(--topbar-h));
-    padding: 0 10px 10px;
-    gap: 10px;
+    padding: 0 8px 8px;
+    gap: 8px;
+  }
+  .game__stage {
+    border-radius: var(--radius-m);
+  }
+  .game__side {
+    gap: 6px;
   }
   .game__camera {
     aspect-ratio: auto;
     flex: 1;
     min-height: 0;
   }
-  .legend {
+  .legend,
+  .xray-toggle,
+  .game__warning {
     display: none;
   }
   .hud {
-    padding: 12px;
+    padding: 10px;
+  }
+  .hud__top {
+    gap: 10px;
+  }
+  .hud__score-value {
+    font-size: 28px;
+  }
+  .hud__progress {
+    padding-top: 4px;
+  }
+  .hud__cell {
+    width: 9px;
+    height: 16px;
+  }
+  .hud__energy {
+    gap: 3px;
+    padding-top: 4px;
+  }
+  .hud__power {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+  .hud__miss {
+    top: 54px;
+    padding: 7px 10px;
+    font-size: 14px;
   }
   .hud__cue-text {
     display: none;
@@ -452,13 +486,28 @@
     gap: 6px;
   }
   .hud__combo {
-    top: 70px;
+    top: 58px;
+    right: 12px;
+  }
+  .hud__combo .t-hud {
+    font-size: 28px;
+  }
+  .duel-panel {
+    top: 52px;
+    right: 8px;
+    min-width: 0;
+    padding: 6px 8px;
   }
 }
 
-@media (max-width: 900px) and (orientation: landscape) {
+/* Phones held sideways: the scene on the left, the camera on the right. */
+@media (orientation: landscape) and (max-height: 500px) {
   .game {
-    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
-    grid-template-rows: 1fr;
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .hud__miss {
+    top: 46px;
+    width: min(420px, calc(100% - 20px));
   }
 }

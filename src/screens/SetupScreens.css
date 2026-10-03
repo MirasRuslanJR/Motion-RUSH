@@ -365,3 +365,36 @@
     overflow: visible;
   }
 }
+
+/* Phones held sideways: the camera on the left, the instructions on the right, no scrolling. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .app--check,
+  .app--calibration,
+  .app--tutorial {
+    height: 100dvh;
+    overflow: hidden;
+  }
+  .setup {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    height: calc(100dvh - var(--topbar-h));
+    padding: 0 10px 8px;
+    gap: 12px;
+  }
+  .setup__viewport {
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    aspect-ratio: auto;
+  }
+  .tutorial__main {
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+  .setup__panel {
+    overflow-y: auto;
+    gap: 10px;
+  }
+  .tutorial__figure {
+    display: none;
+  }
+}

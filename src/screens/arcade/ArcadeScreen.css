@@ -479,29 +479,108 @@
   align-self: flex-start;
 }
 
-@media (max-width: 900px) {
+/* Phones: the game takes the screen. The stage keeps the camera's own shape (a star at the
+   edge of the picture must stay visible) and is as big as fits; the rules move into the intro. */
+.arcade__intro-rules {
+  display: none;
+}
+
+@media (max-width: 900px), (max-height: 500px) {
   .arcade {
     grid-template-columns: minmax(0, 1fr);
-    height: auto;
-    /* Rows hug their content instead of stretching into the free height. */
-    align-content: start;
-  }
-  /* The stage takes the camera's own shape: a star at the edge of the picture must stay visible. */
-  .arcade__stage {
-    height: auto;
+    grid-template-rows: minmax(0, 1fr);
+    height: calc(100dvh - var(--topbar-h));
     min-height: 0;
+    padding: 0 8px 8px;
+  }
+  .arcade__side {
+    display: none;
+  }
+  .arcade__stage {
+    justify-self: center;
+    align-self: center;
+    width: fit-content;
+    height: fit-content;
+    border-radius: var(--radius-m);
   }
   .arcade__camera {
     position: relative;
     inset: auto;
-    width: 100%;
+    width: min(calc(100vw - 16px), calc((100dvh - var(--topbar-h) - 8px) * var(--video-aspect, 1.3333)));
     aspect-ratio: var(--video-aspect, 4 / 3);
-    max-height: 78dvh;
   }
   .arcade__hud {
-    padding: 12px;
+    padding: 10px;
+  }
+  .arcade__stat,
+  .arcade__right {
+    padding: 6px 10px;
+  }
+  .arcade__stat strong {
+    font-size: 24px;
+  }
+  .arcade__counter {
+    font-size: 18px;
+  }
+  .arcade__middle {
+    padding-top: 2vh;
+  }
+  .arcade__cue {
+    padding: 8px 16px;
+    border-radius: var(--radius-m);
+  }
+  .arcade__cue strong {
+    font-size: clamp(22px, 7vw, 34px);
+  }
+  .arcade__cue span {
+    font-size: 13px;
+  }
+  .arcade__toast {
+    padding: 8px 12px;
+    font-size: 14px;
   }
   .arcade__meter {
-    grid-template-columns: auto minmax(120px, 1fr);
+    grid-template-columns: auto minmax(100px, 1fr);
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+  .arcade__progress.has-runner {
+    margin: 20px 26px 0 6px;
+  }
+  .arcade__intro-rules {
+    display: grid;
+    gap: 6px;
+    max-width: 34ch;
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+    text-align: left;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text-2);
+  }
+  .arcade__intro .t-headline {
+    font-size: 24px;
+  }
+  .arcade__intro .overlay__message {
+    font-size: 14px;
+  }
+  .arcade__badge-icon {
+    width: 52px;
+    height: 52px;
+  }
+  .arcade__results {
+    justify-content: flex-start;
+    overflow-y: auto;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .arcade__cue strong {
+    font-size: clamp(20px, 6.5vh, 30px);
+  }
+  .arcade__intro-rules,
+  .arcade__intro .overlay__message {
+    display: none;
   }
 }

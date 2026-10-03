@@ -183,11 +183,14 @@
   font-size: clamp(18px, 1.9vw, 24px);
 }
 
-/* Phones: keep the scene visible — message + thin meter only. */
-@media (max-width: 900px) {
+/* Phones: keep the scene visible — the move, the advice and a thin meter only. */
+@media (max-width: 900px), (max-height: 500px) {
   .hint--compact {
     padding: 8px 12px;
     gap: 6px;
+  }
+  .hint--compact .hint__title {
+    font-size: clamp(18px, 5.4vw, 26px);
   }
   .hint--compact .hint__label,
   .hint--compact .hint__meter-head {
@@ -198,5 +201,14 @@
   }
   .hint--compact .hint__track {
     height: 5px;
+  }
+}
+
+@media (max-height: 500px) {
+  .hint--compact .hint__title {
+    font-size: clamp(16px, 5.6vh, 24px);
+  }
+  .hint--compact .hint__message {
+    font-size: 13px;
   }
 }
