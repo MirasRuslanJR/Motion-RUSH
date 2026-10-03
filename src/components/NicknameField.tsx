@@ -5,10 +5,12 @@ interface NicknameFieldProps {
   value: string;
   onSaved: (name: string) => void;
   compact?: boolean;
+  /** Input id, unique on the page (a screen may show two fields for different layouts). */
+  id?: string;
 }
 
 /** Player name for the global leaderboard and online duels (typed once, stored locally). */
-export function NicknameField({ value, onSaved, compact = false }: NicknameFieldProps) {
+export function NicknameField({ value, onSaved, compact = false, id = 'nickname' }: NicknameFieldProps) {
   const [draft, setDraft] = useState(value);
   const clean = cleanNickname(draft);
   const valid = clean.length >= 2;
@@ -23,12 +25,12 @@ export function NicknameField({ value, onSaved, compact = false }: NicknameField
         onSaved(saveNickname(clean).nickname);
       }}
     >
-      <label className="t-label" htmlFor="nickname">
+      <label className="t-label" htmlFor={id}>
         Твой ник
       </label>
       <div className="nick__row">
         <input
-          id="nickname"
+          id={id}
           className="nick__input"
           value={draft}
           maxLength={20}

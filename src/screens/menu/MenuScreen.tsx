@@ -293,8 +293,9 @@ export function MenuScreen({ engine, ready, profile, lastMode, invite, muted, on
           </ul>
         </nav>
 
+        {/* Always the same height: the column must not shift under the cursor while items are hovered. */}
         <footer className="menu__profile">
-          {active !== 'online' && <NicknameField value={profile.nickname} onSaved={(nickname) => onProfile({ ...profile, nickname })} compact />}
+          <NicknameField key={profile.nickname} value={profile.nickname} onSaved={(nickname) => onProfile({ ...profile, nickname })} compact />
           {profile.bestScore > 0 && (
             <p className="menu__best">
               Рекорд <strong>{profile.bestScore.toLocaleString('ru-RU')}</strong> · игр {profile.sessions}
@@ -303,14 +304,8 @@ export function MenuScreen({ engine, ready, profile, lastMode, invite, muted, on
         </footer>
       </section>
 
-      <motion.section
-        key={active}
-        className="menu__panel"
-        aria-label={item.title}
-        initial={{ opacity: 0.4, x: 14 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
-      >
+      {/* A fixed box: switching sections only swaps (and briefly fades) its content, nothing moves. */}
+      <motion.section key={active} className="menu__panel" aria-label={item.title} initial={{ opacity: 0.55 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
         <div className="menu__panel-head">
           <button type="button" className="menu__back" onClick={() => setSheet(false)} aria-label="Назад в меню">
             <Icon name="left" size={18} />
@@ -364,7 +359,11 @@ export function MenuScreen({ engine, ready, profile, lastMode, invite, muted, on
                       Тебя позвали в дуэль: комната <strong>{invite}</strong>
                     </p>
                   )}
-                  <NicknameField value={profile.nickname} onSaved={(nickname) => onProfile({ ...profile, nickname })} />
+                  {profile.nickname.length < 2 && <p className="menu__online-hint">Для дуэли нужен ник — впиши его в поле слева внизу.</p>}
+                  {/* Phones: the list with the footer field is hidden while a section is open. */}
+                  <div className="menu__online-nick">
+                    <NicknameField key={profile.nickname} id="nickname-online" value={profile.nickname} onSaved={(nickname) => onProfile({ ...profile, nickname })} />
+                  </div>
                 </div>
               )}
             </div>

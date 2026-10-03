@@ -43,6 +43,8 @@
 
 /* ── Left column ── */
 .menu__left {
+  /* The logo is sized by this column's width, so it never reaches into the panel. */
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -53,7 +55,8 @@
 .menu__logo {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: clamp(30px, 3.1vw, 46px);
+  font-size: clamp(26px, 2.5vw, 42px);
+  font-size: min(46px, 10.2cqi);
   line-height: 1;
   letter-spacing: 0.01em;
   color: #fff;
@@ -193,13 +196,13 @@
   font-family: var(--font-display);
 }
 
-/* ── Section panel ── */
+/* ── Section panel: one fixed box, so switching sections never moves anything ── */
 .menu__panel {
   align-self: center;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-height: calc(100dvh - 2 * clamp(22px, 5vh, 56px));
+  height: min(700px, calc(100dvh - clamp(22px, 5vh, 56px) - clamp(36px, 6vh, 64px)));
   overflow-y: auto;
   padding: clamp(18px, 2.6vh, 24px) clamp(18px, 2vw, 26px);
   border-radius: 22px;
@@ -384,6 +387,44 @@
   color: var(--warm);
 }
 
+.menu__online-hint {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--warn);
+}
+
+/* The panel's own nickname field is for phones only (on wider screens the footer field is always there). */
+.menu__online-nick {
+  display: none;
+}
+
+/* Laptops with short screens: a tighter panel, so the tallest section still fits without scrolling. */
+@media (max-height: 820px) and (min-width: 761px) {
+  .menu__panel {
+    gap: 12px;
+  }
+  .menu__tiles {
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 8px;
+  }
+  .menu__tile-title {
+    font-size: 11px;
+  }
+  .menu__detail {
+    padding: 10px 14px;
+  }
+  .menu__tagline-mode {
+    font-size: 14px;
+  }
+  .menu__level {
+    padding: 8px 4px;
+  }
+  .menu__play {
+    min-height: 50px;
+    font-size: 17px;
+  }
+}
+
 /* Difficulty: four levels, one to four lit squares. */
 .menu__difficulty {
   display: grid;
@@ -466,10 +507,12 @@
   color: var(--text-3);
 }
 
+/* The Play button stays in the same place for every section: the bottom of the panel. */
 .menu__start {
   display: grid;
   justify-items: start;
   gap: 8px;
+  margin-top: auto;
 }
 
 .menu__play {
@@ -525,12 +568,18 @@
   color: var(--warn);
 }
 
-/* Leaderboard, tutorial, how to play. */
+/* Leaderboard, tutorial, how to play. The main button sits at the bottom, where Play is in other sections. */
 .menu__info {
-  display: grid;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 16px;
-  justify-items: start;
   color: var(--text-2);
+}
+
+.menu__info > .menu__play {
+  margin-top: auto;
 }
 
 .menu__moves,
@@ -716,11 +765,18 @@
   /* A section replaces the list (no overlay — nothing to get stuck behind). */
   .menu__panel {
     display: none;
+    height: auto;
     max-height: none;
     overflow: visible;
     padding: 14px;
     border-radius: 18px;
     background: rgba(9, 10, 20, 0.86);
+  }
+  .menu__online-nick {
+    display: block;
+  }
+  .menu__online-hint {
+    display: none;
   }
   .menu.has-sheet .menu__left {
     display: none;
