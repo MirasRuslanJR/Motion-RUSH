@@ -274,23 +274,51 @@
   line-height: 1.35;
 }
 
-.landing__features {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
+/* The project in four numbers. */
+.landing__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
   width: min(100%, 560px);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.landing__features li {
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  font-size: 13px;
-  font-weight: 600;
+.landing__stats li {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--radius-m);
+  border-top: 2px solid var(--cyan);
+  background: linear-gradient(180deg, var(--cyan-soft), transparent 80%);
+}
+
+.landing__stats li:nth-child(2) {
+  border-top-color: var(--violet);
+  background: linear-gradient(180deg, var(--violet-soft), transparent 80%);
+}
+
+.landing__stats li:nth-child(3) {
+  border-top-color: var(--warm);
+  background: linear-gradient(180deg, var(--warm-soft), transparent 80%);
+}
+
+.landing__stats li:nth-child(4) {
+  border-top-color: var(--success);
+  background: linear-gradient(180deg, var(--success-soft), transparent 80%);
+}
+
+.landing__stats strong {
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.landing__stats span {
+  font-size: 12px;
+  line-height: 1.35;
   color: var(--text-2);
 }
 
@@ -324,7 +352,8 @@
   .landing__stage {
     width: min(100%, 320px, 40vh);
   }
-  .landing__moves {
+  .landing__moves,
+  .landing__stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

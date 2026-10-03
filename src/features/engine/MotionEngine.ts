@@ -78,7 +78,14 @@ export interface MotionFrame {
   /** Adaptive rendering quality for this frame (see QualityGovernor). */
   render: QualitySettings;
   renderLevel: QualityLevel;
-  stats: { fps: number; inferenceFps: number; inferenceMs: number; targetInferenceFps: number };
+  stats: {
+    fps: number;
+    inferenceFps: number;
+    inferenceMs: number;
+    targetInferenceFps: number;
+    /** Results arrive slowly (busy laptop): lighter smoothing is on. */
+    slow: boolean;
+  };
 }
 
 export type FrameListener = (frame: Readonly<MotionFrame>, dtMs: number) => void;
@@ -183,6 +190,8 @@ export class MotionEngine {
   private targetFps: number = TRACKING_CONFIG.inference.maxFps;
   private lastRateChangeAt = 0;
   private avgInferenceMs = 0;
+  /** Average time between recognition results. */
+  private avgIntervalMs = 0;
   private othersSince: number | null = null;
   private othersGoneSince: number | null = null;
   private primaryCenter: { x: number; y: number } | null = null;
@@ -217,7 +226,7 @@ export class MotionEngine {
       twoPlayer: 'off',
       render: this.quality.settings,
       renderLevel: this.quality.level,
-      stats: { fps: 0, inferenceFps: 0, inferenceMs: 0, targetInferenceFps: this.targetFps },
+      stats: { fps: 0, inferenceFps: 0, inferenceMs: 0, targetInferenceFps: this.targetFps, slow: false },
     };
   }
 
@@ -430,6 +439,22 @@ export class MotionEngine {
     }
   }
 
+  /**
+   * Few results per second (a busy laptop, a video call): a short jump spans one
+   * or two frames, and the usual smoothing would cut it short. Lighter smoothing
+   * until the rate recovers (with hysteresis, so it does not flicker).
+   */
+  private adaptSmoothing(intervalMs: number): void {
+    // A pause longer than a second (person left, tab hidden) says nothing about the rate.
+    if (intervalMs > 1000) return;
+    const s = TRACKING_CONFIG.smoothing;
+    this.avgIntervalMs = this.avgIntervalMs === 0 ? intervalMs : this.avgIntervalMs * 0.9 + intervalMs * 0.1;
+    const slow = this.frame.stats.slow ? this.avgIntervalMs > s.slowExitMs : this.avgIntervalMs > s.slowEnterMs;
+    if (slow === this.frame.stats.slow) return;
+    this.frame.stats.slow = slow;
+    this.smoother.setParams(slow ? s.slowLandmarks : s.landmarks);
+  }
+
   /** Everything after inference: cheap (< 1 ms), always on the main thread. */
   private processPoses(result: PoseResult): void {
     if (this.disposed) return;
@@ -441,6 +466,7 @@ export class MotionEngine {
     const dtSinceLast = this.lastProcessedAt ? now - this.lastProcessedAt : 33;
     this.lastProcessedAt = now;
     this.adaptInferenceRate(now, result.inferenceMs);
+    this.adaptSmoothing(dtSinceLast);
     this.inferenceMeter.tick(performance.now());
     this.resultArrived = true;
 

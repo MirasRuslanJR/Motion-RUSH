@@ -21,13 +21,18 @@ function smoothingFactor(dtSeconds: number, cutoffHz: number): number {
 }
 
 export class OneEuroFilter {
-  private readonly params: OneEuroParams;
+  private params: OneEuroParams;
   private value = 0;
   private derivative = 0;
   private lastTimeMs = 0;
   private initialized = false;
 
   constructor(params: OneEuroParams) {
+    this.params = params;
+  }
+
+  /** New tuning from the next sample on; the filtered value carries over (no jump). */
+  setParams(params: OneEuroParams): void {
     this.params = params;
   }
 

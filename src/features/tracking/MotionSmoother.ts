@@ -24,6 +24,14 @@ export class MotionSmoother {
     }
   }
 
+  /** Switch the x/y tuning (e.g. lighter smoothing when recognition runs slowly). */
+  setParams(params: OneEuroParams): void {
+    for (let i = 0; i < POSE_LANDMARK_COUNT; i++) {
+      this.fx[i]?.setParams(params);
+      this.fy[i]?.setParams(params);
+    }
+  }
+
   reset(): void {
     for (let i = 0; i < POSE_LANDMARK_COUNT; i++) {
       this.fx[i]?.reset();

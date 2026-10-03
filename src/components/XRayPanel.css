@@ -1,0 +1,165 @@
+.xray {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-m);
+  border: 1px solid rgba(79, 220, 239, 0.35);
+  background:
+    repeating-linear-gradient(0deg, rgba(79, 220, 239, 0.035) 0 1px, transparent 1px 4px),
+    rgba(6, 12, 20, 0.92);
+  font-size: 13px;
+}
+
+.xray__title {
+  color: var(--cyan);
+}
+
+.xray__facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.xray__facts dt {
+  color: var(--text-3);
+  font-weight: 600;
+}
+
+.xray__facts dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.xray__bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'label value'
+    'track track';
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.xray__bar-label {
+  grid-area: label;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.xray__value {
+  grid-area: value;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.xray__track {
+  grid-area: track;
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.xray__fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: var(--cyan);
+  border-radius: 999px;
+  transition: transform 0.1s linear;
+}
+
+.xray__mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text);
+  opacity: 0.8;
+}
+
+.xray__dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 10px var(--cyan);
+  transition: left 0.1s linear;
+}
+
+/* The gesture is recognised: the bar lights up. */
+.xray__bar[data-on='true'] .xray__fill,
+.xray__bar[data-on='true'] .xray__dot {
+  background: var(--success);
+  box-shadow: 0 0 10px var(--success);
+}
+
+.xray__bar[data-on='true'] .xray__bar-label {
+  color: var(--success);
+}
+
+.xray__rule {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.xray__rule[data-verdict='correct'] {
+  color: var(--success);
+}
+
+.xray__rule[data-verdict='near'] {
+  color: var(--warn);
+}
+
+.xray__rule[data-verdict='wrong'],
+.xray__rule[data-verdict='other'] {
+  color: var(--error);
+}
+
+.xray__message {
+  min-height: 1.4em;
+  color: var(--text-2);
+  font-style: italic;
+}
+
+/* The switch above the panel. */
+.xray-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(79, 220, 239, 0.4);
+  background: rgba(79, 220, 239, 0.08);
+  color: var(--cyan);
+  font: inherit;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.xray-toggle[aria-pressed='true'] {
+  background: var(--cyan);
+  color: #06121a;
+}
+
+.xray-toggle kbd {
+  padding: 1px 6px;
+  border-radius: 5px;
+  border: 1px solid currentColor;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  opacity: 0.8;
+}

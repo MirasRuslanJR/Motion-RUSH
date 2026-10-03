@@ -246,6 +246,25 @@
     box-shadow 0.3s;
 }
 
+/* A big pictogram of the mode in the corner of the card — each card reads at a glance. */
+.mode-card__mark {
+  position: absolute;
+  right: -28px;
+  bottom: -30px;
+  color: var(--accent);
+  opacity: 0.09;
+  transform: rotate(-12deg);
+  pointer-events: none;
+}
+
+.mode-card.is-selected .mode-card__mark {
+  opacity: 0.16;
+}
+
+.mode-card > :not(.mode-card__mark) {
+  position: relative;
+}
+
 .is-dragging .mode-card {
   transition:
     border-color 0.3s,

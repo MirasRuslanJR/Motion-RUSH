@@ -327,6 +327,9 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
                   aria-hidden={hidden}
                   aria-label={m.title}
                 >
+                  <span className="mode-card__mark" aria-hidden="true">
+                    <ModeIcon name={m.icon} size={170} />
+                  </span>
                   <span className="mode-card__head">
                     <span className="mode-card__icon">
                       <ModeIcon name={m.icon} size={26} />

@@ -77,6 +77,15 @@ export const TRACKING_CONFIG = {
 
   smoothing: {
     landmarks: { minCutoff: 1.4, beta: 3.0, dCutoff: 1.0 },
+    /**
+     * Slow recognition (a busy laptop, a video call next to the game): with few
+     * frames per move the usual filter cuts a short jump by a third. Lighter
+     * smoothing then — the low frame rate already smooths enough.
+     */
+    slowLandmarks: { minCutoff: 4.0, beta: 3.0, dCutoff: 1.0 },
+    /** Average time between results that switches to the slow tuning, and back. */
+    slowEnterMs: 130,
+    slowExitMs: 100,
     visibilityTauMs: 120,
   },
 

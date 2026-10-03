@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import { useState } from 'react';
 import { DemoFigure } from '../components/DemoFigure';
 import { Icon } from '../components/Icon';
+import { DIAGNOSIS_RULES } from '../features/gestures/diagnosisRules';
 import { GAME_MODES } from '../features/modes/modes';
 import { BODY_MOTION_META, type ExpectedMotion } from '../features/gestures/types';
 import { isCameraApiAvailable } from '../lib/env';
@@ -18,7 +19,13 @@ const HOW_TO: { title: string; text: string }[] = [
   { title: 'Двигайся', text: 'Перебегай, прыгай, приседай, танцуй. Ошибёшься — игра подскажет, как правильно.' },
 ];
 
-const FEATURES = [`${GAME_MODES.length} режимов`, 'Танцпол с музыкой', 'Игра вдвоём', 'Онлайн-дуэль'];
+/** The project in four numbers. */
+const STATS = [
+  { value: String(GAME_MODES.length), label: 'режимов: бег, танцы, мини-игры' },
+  { value: String(DIAGNOSIS_RULES.length), label: 'правил, которые объясняют ошибку' },
+  { value: '2', label: 'игрока у одного ноутбука' },
+  { value: '0', label: 'кадров видео уходит в сеть' },
+];
 const TITLE = ['Беги.', 'Прыгай.', 'Танцуй.'];
 
 interface LandingScreenProps {
@@ -115,9 +122,12 @@ export function LandingScreen({ profile, onStart, onLeaderboard }: LandingScreen
             );
           })}
         </ol>
-        <ul className="landing__features" aria-label="Что есть в игре">
-          {FEATURES.map((f) => (
-            <li key={f}>{f}</li>
+        <ul className="landing__stats" aria-label="Игра в цифрах">
+          {STATS.map((s) => (
+            <li key={s.label}>
+              <strong>{s.value}</strong>
+              <span>{s.label}</span>
+            </li>
           ))}
         </ul>
       </section>

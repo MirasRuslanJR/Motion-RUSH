@@ -4,6 +4,7 @@ import { CameraViewport } from '../../components/CameraViewport';
 import { HintPanel } from '../../components/HintPanel';
 import { Icon } from '../../components/Icon';
 import { Ring } from '../../components/Ring';
+import { XRayPanel } from '../../components/XRayPanel';
 import { setRingProgress } from '../../components/ringProgress';
 import { COURSES } from '../../config/game.config';
 import type { MotionEngine, MotionFrame } from '../../features/engine/MotionEngine';
@@ -11,7 +12,7 @@ import type { Diagnosis } from '../../features/gestures/ErrorDiagnosisEngine';
 import { motionMeta, type ControlScheme, type ExpectedMotion, type GestureType } from '../../features/gestures/types';
 import { GameEngine, type GameEvent, type PlayerInput } from '../../features/gameplay/GameEngine';
 import { isPickup, OBSTACLE_REQUIREMENT, type CourseItem, type GameOutcome, type Lane, type SessionResult } from '../../features/gameplay/types';
-import { courseForMode, rulesForMode, type GameModeDef } from '../../features/modes/modes';
+import { courseForMode, rulesForMode, timingForRecognition, type GameModeDef } from '../../features/modes/modes';
 import { computeSessionStats } from '../../features/results/sessionStats';
 import type { DuelRoom } from '../../features/online/DuelRoom';
 import { GameRenderer } from '../../features/render/GameRenderer';
@@ -235,7 +236,12 @@ interface GameScreenProps {
 /** One run of the game. The parent re-mounts it (via `key`) for every new run. */
 export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFinish }: GameScreenProps) {
   const [scheme] = useState<ControlScheme>(() => engine.ui.get().scheme);
-  const [game] = useState(() => new GameEngine(courseForMode(mode, sharedSeed ?? undefined), undefined, rulesForMode(mode, scheme)));
+  const [game] = useState(() => {
+    const rules = rulesForMode(mode, scheme);
+    // A slow device (or a video call alongside) registers moves later: wider windows then.
+    const timing = rules.timing ?? timingForRecognition(engine.frame.stats.inferenceFps);
+    return new GameEngine(courseForMode(mode, sharedSeed ?? undefined), undefined, { ...rules, timing });
+  });
   const lastSentRef = useRef(Number.NEGATIVE_INFINITY);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const backgroundRef = useRef<HTMLCanvasElement>(null);
@@ -250,6 +256,28 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
   const reduced = useReducedMotion() ?? false;
   const multiple = useMotionUi(engine, (s) => s.multiplePeople);
   const trackingMessage = useMotionUi(engine, (s) => s.trackingMessage);
+  /** "X-ray": the live recognition values instead of the move legend (button or the X key). */
+  const [xray, setXray] = useState(() => {
+    try {
+      return sessionStorage.getItem('motion-rush:xray') === '1';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('motion-rush:xray', xray ? '1' : '0');
+    } catch {
+      // Not persisted — fine.
+    }
+  }, [xray]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'x' || e.key === 'X' || e.key === 'ч' || e.key === 'Ч') setXray((v) => !v);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -503,8 +531,17 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
             <Icon name="users" size={16} /> В кадре должен быть один человек
           </div>
         )}
-        <MoveLegend engine={engine} next={playing ? nextMotion : null} scheme={scheme} />
-        <UpcomingQueue items={playing ? upcoming(game, hud.nextId, 4) : []} scheme={scheme} />
+        <button type="button" className="xray-toggle" aria-pressed={xray} onClick={() => setXray((v) => !v)}>
+          {xray ? 'Скрыть рентген' : 'Рентген: как игра видит тебя'} <kbd>X</kbd>
+        </button>
+        {xray ? (
+          <XRayPanel engine={engine} />
+        ) : (
+          <>
+            <MoveLegend engine={engine} next={playing ? nextMotion : null} scheme={scheme} />
+            <UpcomingQueue items={playing ? upcoming(game, hud.nextId, 4) : []} scheme={scheme} />
+          </>
+        )}
       </aside>
     </main>
   );

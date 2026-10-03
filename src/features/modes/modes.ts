@@ -98,6 +98,19 @@ export interface GameModeDef {
  * that much: a longer flight and more time to be in place after arrival.
  */
 const DUO_TIMING: GameRules['timing'] = { airtimeMs: 900, clearGraceMs: 450, duckGraceMs: 320 };
+/** A busy laptop (e.g. a video call running next to the game): a bit more time. */
+const BUSY_TIMING: GameRules['timing'] = { airtimeMs: 800, clearGraceMs: 320, duckGraceMs: 270 };
+
+/**
+ * Timing windows for how fast this device recognises poses (results per
+ * second, measured before the run). Slow recognition registers every move
+ * later, so the windows grow by about that delay; a fast device keeps the
+ * standard ones. 0 = not measured yet.
+ */
+export function timingForRecognition(hz: number): GameRules['timing'] | undefined {
+  if (hz <= 0 || hz >= 13) return undefined;
+  return hz < 8 ? DUO_TIMING : BUSY_TIMING;
+}
 
 const RUNNER = { kind: 'runner', players: 1, practice: false, seed: 'random', ranked: true, online: false } as const;
 /**

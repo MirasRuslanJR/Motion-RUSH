@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TRACKING_CONFIG } from '../../config/tracking.config';
 import { OneEuroFilter } from '../../lib/smoothing/filters';
 import { ASPECT, makePose } from '../../test/fixtures';
 import { assessFrame, isTrackable } from './frameQuality';
@@ -84,6 +85,26 @@ describe('OneEuroFilter', () => {
     expect(Math.abs(out - 0.5)).toBeLessThan(0.004);
     for (let i = 60; i < 75; i++) out = f.filter(0.8, i * 33);
     expect(out).toBeGreaterThan(0.75);
+  });
+
+  it('slow recognition: the light tuning keeps a one-frame jump that the usual one cuts', () => {
+    // 5 results a second; the body rises by 0.1 in exactly one frame.
+    const oneFrameJump = (params: typeof TRACKING_CONFIG.smoothing.landmarks | typeof TRACKING_CONFIG.smoothing.slowLandmarks) => {
+      const f = new OneEuroFilter(params);
+      for (let i = 0; i < 10; i++) f.filter(0.5, i * 200);
+      return 0.5 - f.filter(0.4, 2000);
+    };
+    const usual = oneFrameJump(TRACKING_CONFIG.smoothing.landmarks);
+    const light = oneFrameJump(TRACKING_CONFIG.smoothing.slowLandmarks);
+    expect(usual).toBeLessThan(0.075);
+    expect(light).toBeGreaterThan(0.085);
+  });
+
+  it('a filter can switch tuning without jumping', () => {
+    const f = new OneEuroFilter(TRACKING_CONFIG.smoothing.landmarks);
+    for (let i = 0; i < 20; i++) f.filter(0.5, i * 33);
+    f.setParams(TRACKING_CONFIG.smoothing.slowLandmarks);
+    expect(f.filter(0.5, 20 * 33)).toBeCloseTo(0.5);
   });
 });
 

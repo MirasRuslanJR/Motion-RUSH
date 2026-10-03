@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { COURSES, GAME_CONFIG } from '../../config/game.config';
 import type { ExpectedMotion } from '../gestures/types';
 import { computeSessionStats } from '../results/sessionStats';
-import { getMode, courseForMode, rulesForMode } from '../modes/modes';
+import { getMode, courseForMode, rulesForMode, timingForRecognition } from '../modes/modes';
 import { dailySeed, generateCourse } from './course';
 import { GameEngine, type GameEvent, type PlayerInput } from './GameEngine';
 import { isPickup, type CourseItem, type Lane } from './types';
@@ -276,6 +276,15 @@ describe('game modes and power-ups', () => {
       expect(duo.result().obstacles[0]?.result).not.toBe('miss');
       expect(duo.airtimeMs).toBeGreaterThan(solo.airtimeMs);
     }
+  });
+
+  it('a slow device gets wider windows; a fast one keeps the standard ones', () => {
+    expect(timingForRecognition(0)).toBeUndefined();
+    expect(timingForRecognition(25)).toBeUndefined();
+    const busy = timingForRecognition(10);
+    const slow = timingForRecognition(6);
+    expect(busy?.airtimeMs).toBeGreaterThan(GAME_CONFIG.airtimeMs);
+    expect(slow?.clearGraceMs).toBeGreaterThan(busy?.clearGraceMs ?? 0);
   });
 
   it('the daily seed changes at midnight Astana time', () => {
