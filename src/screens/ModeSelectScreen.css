@@ -100,7 +100,7 @@
   position: relative;
   flex: 1;
   min-width: 0;
-  height: 326px;
+  height: 370px;
   overflow: hidden;
   touch-action: pan-y;
   cursor: grab;
@@ -229,7 +229,7 @@
   align-content: start;
   gap: 10px;
   width: var(--card-w);
-  height: 276px;
+  height: 320px;
   padding: 24px 22px 20px;
   border-radius: var(--radius-l);
   border: 1px solid var(--line);
@@ -246,22 +246,26 @@
     box-shadow 0.3s;
 }
 
-/* A big pictogram of the mode in the corner of the card — each card reads at a glance. */
-.mode-card__mark {
+/* Cover art across the top of the card (src/assets/modes): each mode reads at a glance. */
+.mode-card__art {
   position: absolute;
-  right: -28px;
-  bottom: -30px;
-  color: var(--accent);
-  opacity: 0.09;
-  transform: rotate(-12deg);
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 132px;
+  object-fit: cover;
+  opacity: 0.62;
+  -webkit-mask-image: linear-gradient(180deg, #000 48%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 48%, transparent 100%);
   pointer-events: none;
+  transition: opacity 0.3s;
 }
 
-.mode-card.is-selected .mode-card__mark {
-  opacity: 0.16;
+.mode-card.is-selected .mode-card__art {
+  opacity: 1;
 }
 
-.mode-card > :not(.mode-card__mark) {
+.mode-card > :not(.mode-card__art) {
   position: relative;
 }
 
@@ -288,11 +292,13 @@
     transition: opacity 0.2s;
   }
 }
+/* Icon and badge sit on the art; the title starts below it. */
 .mode-card__head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+  min-height: 76px;
 }
 
 .mode-card__icon {
@@ -302,7 +308,7 @@
   height: 46px;
   border-radius: 14px;
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, #0c0d16);
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
@@ -310,6 +316,7 @@
   justify-self: start;
   padding: 3px 9px;
   border-radius: 999px;
+  background: rgba(12, 13, 22, 0.78);
   font-family: var(--font-ui);
   font-size: 10px;
   font-weight: 700;
@@ -381,11 +388,17 @@
     flex: none;
   }
   .carousel__viewport {
-    height: 290px;
+    height: 344px;
   }
   .mode-card {
-    height: 252px;
+    height: 306px;
     padding: 20px 18px 16px;
+  }
+  .mode-card__art {
+    height: 120px;
+  }
+  .mode-card__head {
+    min-height: 70px;
   }
   .modes__start {
     min-height: 0;

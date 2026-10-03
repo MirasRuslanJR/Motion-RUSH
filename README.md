@@ -21,6 +21,7 @@ Admit Hackathon 2026 · кейс «Motion — камера вместо джой
 - **Распознавание надёжнее:**
   - скелет больше не «съезжает» с человека: трекер сбрасывается при смене кадра, пороги уверенности строже;
   - на медленном ноутбуке (например, рядом с видеозвонком) включается щадящий режим — лёгкое сглаживание и более широкие окна, поэтому короткий прыжок не теряется.
+- **Своя графика.** Нарисованные SVG-ассеты в [`src/assets/`](src/assets): закат с городом на горизонте трассы, силовые стены, барьеры, лазерные столбы, бонусы и обложка для каждого режима. Спрайты растеризуются один раз, поэтому на встроенной графике по-прежнему 60 fps; пока картинка грузится, игра рисует прежнюю векторную версию.
 - **Новый дизайн.**
   - «Человечный неон», понятный русский интерфейс, крупный заголовок, кнопка старта сразу на виду.
   - Блоки «Дальше по трассе» и «Дальше» на танцполе; легенда режима «ошибка» в результатах.
@@ -336,7 +337,8 @@ src/
 │  ├─ arcade/           мини-игры: StarCatch, FreezeGame, ReactionGame, SquatGame (чистая логика + тесты)
 │  ├─ modes/            GAME_MODES — 17 режимов: трасса, жизни, seed, ранжирование, окна по времени
 │  ├─ online/           globalLeaderboard (Supabase), DuelRoom (Realtime presence + broadcast)
-│  ├─ render/           CameraOverlayRenderer, GameRenderer (+ «призрак» соперника), DanceRenderer, skeletonRenderer, particles
+│  ├─ render/           CameraOverlayRenderer, GameRenderer (+ «призрак» соперника), DanceRenderer, skeletonRenderer, particles,
+│  │                    sprites (SVG-ассеты сцены, растеризуются один раз)
 │  └─ results/          sessionStats
 ├─ components/          CameraViewport, HintPanel, DemoFigure, HoldGesture, NicknameField, Ring, DebugPanel…
 ├─ screens/             Landing, Permission, CameraError, CameraCheck, Calibration, Tutorial,
@@ -379,7 +381,7 @@ CameraSource → PoseTracker (12–30 Hz, адаптивно) → Normalizer →
 | Canvas 2D (свой код) | скелет, «призрак», игровая сцена, частицы, motion trail |
 | Vitest, ESLint, typescript-eslint | тесты и качество кода |
 
-Kokonut UI, Bklit UI и Anime.js рассматривались и **сознательно не подключены**. Первые две требуют Tailwind + shadcn, то есть вторую систему стилей ради пары карточек и одного графика. Anime.js дублировал бы Motion. Графики результатов — небольшие собственные SVG-компоненты. Шрифты: Unbounded, Manrope, JetBrains Mono (Google Fonts, OFL).
+Kokonut UI, Bklit UI и Anime.js рассматривались и **сознательно не подключены**. Первые две требуют Tailwind + shadcn, то есть вторую систему стилей ради пары карточек и одного графика. Anime.js дублировал бы Motion. Графики результатов — небольшие собственные SVG-компоненты. Вся графика игры (горизонт, препятствия, бонусы, обложки режимов) — собственные SVG-ассеты в `src/assets/`, без стоков и внешних картинок. Шрифты: Unbounded, Manrope, JetBrains Mono (Google Fonts, OFL).
 
 ## Тесты и качество
 

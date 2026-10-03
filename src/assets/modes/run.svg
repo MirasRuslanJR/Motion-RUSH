@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="260" viewBox="0 0 680 260">
+  <!-- Runner modes: sprint down the neon track towards the sun. -->
+  <defs>
+    <linearGradient id="sun" x1="0" y1="68" x2="0" y2="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffe3a3"/><stop offset="0.5" stop-color="#ffa48f"/><stop offset="1" stop-color="#ff4fd8"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="150" x2="0" y2="260" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9b85ff" stop-opacity="0.06"/><stop offset="1" stop-color="#4fdcef" stop-opacity="0.24"/>
+    </linearGradient>
+    <mask id="cuts" maskUnits="userSpaceOnUse" x="0" y="0" width="680" height="260">
+      <rect width="680" height="260" fill="#fff"/>
+      <rect x="250" y="118" width="180" height="4" fill="#000"/>
+      <rect x="250" y="130" width="180" height="6" fill="#000"/>
+      <rect x="250" y="142" width="180" height="8" fill="#000"/>
+    </mask>
+    <filter id="g" x="-20%" y="-40%" width="140%" height="180%">
+      <feGaussianBlur stdDeviation="3.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path d="M258 150 A82 82 0 0 1 422 150 Z" fill="url(#sun)" mask="url(#cuts)" filter="url(#g)"/>
+  <g fill="#1a1240" stroke="#9b85ff" stroke-width="2.5" stroke-linejoin="round">
+    <path d="M110 150 L165 120 L205 138 L248 110 L290 150 Z"/>
+    <path d="M390 150 L432 110 L475 138 L515 120 L570 150 Z"/>
+  </g>
+  <path d="M40 150 H640" stroke="#4fdcef" stroke-opacity="0.7" stroke-width="2"/>
+  <path d="M326 150 L354 150 L620 260 L60 260 Z" fill="url(#floor)"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M326 150 L60 260 M354 150 L620 260" stroke="#9b85ff" stroke-width="3" filter="url(#g)"/>
+    <path d="M335 150 L237 260 M345 150 L443 260" stroke="#4fdcef" stroke-opacity="0.5" stroke-width="2"/>
+    <path d="M273 172 H407 M205 200 H475 M118 236 H562" stroke="#4fdcef" stroke-opacity="0.22" stroke-width="2"/>
+  </g>
+  <g filter="url(#g)" stroke-linecap="round">
+    <path d="M318 172 V162 M362 172 V162" stroke="#4fdcef" stroke-width="3"/>
+    <path d="M314 161 H366" stroke="#f4f1ec" stroke-width="5"/>
+  </g>
+  <g stroke="#4fdcef" stroke-width="3" stroke-linecap="round" opacity="0.55">
+    <path d="M214 176 H282"/><path d="M196 198 H268"/><path d="M226 222 H290"/>
+  </g>
+  <g transform="translate(336 200)" fill="none" stroke="#0c0d16" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+    <path d="M12 -38 L0 0 M12 -38 L36 -22 L44 -42 M12 -38 L-10 -24 L-24 -8 M0 0 L26 14 L20 44 M0 0 L-18 24 L-44 36" stroke-width="14"/>
+    <circle cx="20" cy="-62" r="15" stroke-width="12"/>
+  </g>
+  <g filter="url(#g)">
+    <g transform="translate(336 200)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M0 0 L26 14 L20 44 M0 0 L-18 24 L-44 36" stroke="#9b85ff" stroke-width="7"/>
+      <path d="M12 -38 L0 0" stroke="#f4f1ec" stroke-width="7"/>
+      <path d="M12 -38 L36 -22 L44 -42 M12 -38 L-10 -24 L-24 -8" stroke="#4fdcef" stroke-width="6"/>
+      <circle cx="20" cy="-62" r="15" fill="#4fdcef" fill-opacity="0.18" stroke="#f4f1ec" stroke-width="5"/>
+    </g>
+  </g>
+</svg>

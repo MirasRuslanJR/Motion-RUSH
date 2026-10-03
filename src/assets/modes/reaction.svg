@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="260" viewBox="0 0 680 260">
+  <!-- Reaction: the signal fires, react in milliseconds. -->
+  <defs>
+    <linearGradient id="bolt" x1="0" y1="60" x2="0" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff6dc"/><stop offset="1" stop-color="#ffc76b"/>
+    </linearGradient>
+    <filter id="g" x="-20%" y="-40%" width="140%" height="180%">
+      <feGaussianBlur stdDeviation="3.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="228" y="44" width="24" height="14" rx="4" fill="#4fdcef"/>
+  <rect x="234" y="56" width="12" height="12" fill="#4fdcef"/>
+  <rect x="291" y="68" width="16" height="12" rx="3" fill="#4fdcef" transform="rotate(40 299 74)"/>
+  <circle cx="240" cy="146" r="72" fill="#10142b" stroke="#4fdcef" stroke-width="8" filter="url(#g)"/>
+  <circle cx="240" cy="146" r="58" fill="none" stroke="#4fdcef" stroke-opacity="0.35" stroke-width="2"/>
+  <g stroke="#9b85ff" stroke-width="3" stroke-linecap="round">
+    <path d="M240 96 V88 M265 102.7 L269 95.8 M283.3 121 L290.2 117 M290 146 H298 M283.3 171 L290.2 175 M265 189.3 L269 196.2 M240 196 V204 M215 189.3 L211 196.2 M196.7 171 L189.8 175 M190 146 H182 M196.7 121 L189.8 117 M215 102.7 L211 95.8"/>
+  </g>
+  <path d="M240 92 A54 54 0 0 1 286.8 173" fill="none" stroke="#ffb48c" stroke-width="6" stroke-linecap="round" filter="url(#g)"/>
+  <path d="M240 146 L278 168" stroke="#f4f1ec" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="240" cy="146" r="7" fill="#f4f1ec"/>
+  <path d="M392 60 L352 136 L378 136 L366 200 L414 116 L388 116 Z" fill="url(#bolt)" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" filter="url(#g)"/>
+  <g stroke="#4fdcef" stroke-width="3" stroke-linecap="round" opacity="0.55">
+    <path d="M430 98 H468"/><path d="M440 130 H484"/><path d="M426 162 H464"/>
+  </g>
+  <g transform="translate(548 192)" fill="none" stroke="#0c0d16" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+    <path d="M0 -38 L-20 -58 L-30 -84 M0 -38 L20 -58 L30 -84 M0 -38 L0 0 M0 0 L-16 22 L-22 46 M0 0 L16 22 L22 46" stroke-width="14"/>
+    <circle cx="0" cy="-60" r="14" stroke-width="12"/>
+  </g>
+  <g filter="url(#g)">
+    <g transform="translate(548 192)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M0 0 L-16 22 L-22 46 M0 0 L16 22 L22 46" stroke="#9b85ff" stroke-width="7"/>
+      <path d="M0 -38 L0 0" stroke="#f4f1ec" stroke-width="7"/>
+      <path d="M0 -38 L-20 -58 L-30 -84 M0 -38 L20 -58 L30 -84" stroke="#4fdcef" stroke-width="6"/>
+      <circle cx="0" cy="-60" r="14" fill="#4fdcef" fill-opacity="0.18" stroke="#f4f1ec" stroke-width="5"/>
+    </g>
+  </g>
+</svg>

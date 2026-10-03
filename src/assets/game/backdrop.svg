@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="600" viewBox="0 0 2400 600">
+  <!-- Synthwave horizon behind the track. The bottom edge is the horizon line; the sky stays transparent. -->
+  <defs>
+    <linearGradient id="sun" x1="0" y1="328" x2="0" y2="600" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffe3a3"/>
+      <stop offset="0.45" stop-color="#ffa48f"/>
+      <stop offset="1" stop-color="#ff4fd8"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="1200" cy="600" r="780" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff5ad1" stop-opacity="0.5"/>
+      <stop offset="0.35" stop-color="#9b85ff" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#9b85ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="haze" x1="0" y1="470" x2="0" y2="600" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff5ad1" stop-opacity="0"/>
+      <stop offset="1" stop-color="#ff5ad1" stop-opacity="0.3"/>
+    </linearGradient>
+    <linearGradient id="far" x1="0" y1="380" x2="0" y2="600" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2a1d5c"/>
+      <stop offset="1" stop-color="#140f30"/>
+    </linearGradient>
+    <linearGradient id="near" x1="0" y1="470" x2="0" y2="600" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#191338"/>
+      <stop offset="1" stop-color="#0b0a1c"/>
+    </linearGradient>
+    <mask id="cuts" maskUnits="userSpaceOnUse" x="0" y="0" width="2400" height="600">
+      <rect width="2400" height="600" fill="#fff"/>
+      <rect x="900" y="452" width="600" height="7" fill="#000"/>
+      <rect x="900" y="486" width="600" height="10" fill="#000"/>
+      <rect x="900" y="518" width="600" height="13" fill="#000"/>
+      <rect x="900" y="548" width="600" height="16" fill="#000"/>
+      <rect x="900" y="577" width="600" height="20" fill="#000"/>
+    </mask>
+    <pattern id="winCyan" width="24" height="28" patternUnits="userSpaceOnUse">
+      <rect x="7" y="8" width="6" height="9" rx="1" fill="#4fdcef" opacity="0.65"/>
+    </pattern>
+    <pattern id="winWarm" width="48" height="56" patternUnits="userSpaceOnUse" x="12" y="14">
+      <rect x="7" y="8" width="6" height="9" rx="1" fill="#ffb48c" opacity="0.9"/>
+    </pattern>
+    <filter id="glow" x="-10%" y="-40%" width="120%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="2400" height="600" fill="url(#halo)"/>
+  <circle cx="1200" cy="600" r="272" fill="url(#sun)" mask="url(#cuts)" filter="url(#glow)"/>
+
+  <!-- Far ridges: violet rim and wireframe facets -->
+  <path d="M0 600 L0 468 L120 418 L250 482 L380 388 L520 466 L650 428 L780 506 L900 560 L1010 600 Z" fill="url(#far)"/>
+  <path d="M1390 600 L1500 560 L1620 506 L1750 428 L1880 466 L2020 388 L2150 482 L2280 418 L2400 468 L2400 600 Z" fill="url(#far)"/>
+  <path d="M120 418 L70 600 M120 418 L190 600 M380 388 L300 600 M380 388 L470 600 M650 428 L590 600 M650 428 L730 600 M1750 428 L1670 600 M1750 428 L1810 600 M2020 388 L1930 600 M2020 388 L2100 600 M2280 418 L2210 600 M2280 418 L2330 600" fill="none" stroke="#9b85ff" stroke-opacity="0.3" stroke-width="2"/>
+  <g fill="none" stroke="#9b85ff" stroke-width="3" stroke-linejoin="round" filter="url(#glow)">
+    <path d="M0 468 L120 418 L250 482 L380 388 L520 466 L650 428 L780 506 L900 560 L1010 600"/>
+    <path d="M1390 600 L1500 560 L1620 506 L1750 428 L1880 466 L2020 388 L2150 482 L2280 418 L2400 468"/>
+  </g>
+
+  <!-- City: left -->
+  <g stroke="#9b85ff" stroke-opacity="0.75" stroke-width="2">
+    <rect x="24" y="404" width="64" height="196" fill="#100d26"/>
+    <rect x="96" y="338" width="44" height="262" fill="#120e2b"/>
+    <rect x="148" y="450" width="78" height="150" fill="#0f0c24"/>
+    <rect x="236" y="374" width="56" height="226" fill="#120e2b"/>
+    <rect x="300" y="428" width="88" height="172" fill="#100d26"/>
+    <rect x="398" y="472" width="46" height="128" fill="#0f0c24"/>
+  </g>
+  <g>
+    <rect x="30" y="414" width="52" height="186" fill="url(#winCyan)"/>
+    <rect x="102" y="348" width="32" height="252" fill="url(#winWarm)"/>
+    <rect x="154" y="460" width="66" height="140" fill="url(#winCyan)"/>
+    <rect x="242" y="384" width="44" height="216" fill="url(#winCyan)"/>
+    <rect x="306" y="438" width="76" height="162" fill="url(#winWarm)"/>
+    <rect x="404" y="482" width="34" height="118" fill="url(#winCyan)"/>
+  </g>
+  <!-- City: right -->
+  <g stroke="#9b85ff" stroke-opacity="0.75" stroke-width="2">
+    <rect x="2312" y="404" width="64" height="196" fill="#100d26"/>
+    <rect x="2260" y="338" width="44" height="262" fill="#120e2b"/>
+    <rect x="2174" y="450" width="78" height="150" fill="#0f0c24"/>
+    <rect x="2108" y="374" width="56" height="226" fill="#120e2b"/>
+    <rect x="2012" y="428" width="88" height="172" fill="#100d26"/>
+    <rect x="1956" y="472" width="46" height="128" fill="#0f0c24"/>
+  </g>
+  <g>
+    <rect x="2318" y="414" width="52" height="186" fill="url(#winWarm)"/>
+    <rect x="2266" y="348" width="32" height="252" fill="url(#winCyan)"/>
+    <rect x="2180" y="460" width="66" height="140" fill="url(#winCyan)"/>
+    <rect x="2114" y="384" width="44" height="216" fill="url(#winWarm)"/>
+    <rect x="2018" y="438" width="76" height="162" fill="url(#winCyan)"/>
+    <rect x="1962" y="482" width="34" height="118" fill="url(#winCyan)"/>
+  </g>
+  <!-- Antennas -->
+  <g stroke="#9b85ff" stroke-width="3" stroke-linecap="round">
+    <path d="M118 338 V292"/><path d="M264 374 V336"/><path d="M2282 338 V292"/><path d="M2136 374 V336"/>
+  </g>
+  <g fill="#ff5ad1" filter="url(#glow)">
+    <circle cx="118" cy="290" r="5"/><circle cx="264" cy="334" r="4"/><circle cx="2282" cy="290" r="5"/><circle cx="2136" cy="334" r="4"/>
+  </g>
+
+  <!-- Near ridges with a cyan rim light -->
+  <path d="M0 600 L0 522 L150 486 L300 540 L450 500 L610 560 L740 600 Z" fill="url(#near)"/>
+  <path d="M1660 600 L1790 560 L1950 500 L2100 540 L2250 486 L2400 522 L2400 600 Z" fill="url(#near)"/>
+  <g fill="none" stroke="#4fdcef" stroke-width="2.5" stroke-linejoin="round" filter="url(#glow)">
+    <path d="M0 522 L150 486 L300 540 L450 500 L610 560 L740 600"/>
+    <path d="M1660 600 L1790 560 L1950 500 L2100 540 L2250 486 L2400 522"/>
+  </g>
+
+  <rect y="470" width="2400" height="130" fill="url(#haze)"/>
+</svg>

@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="260" viewBox="0 0 680 260">
+  <!-- Versus 2P: two runners, two lanes, one laptop. -->
+  <defs>
+    <linearGradient id="sun" x1="0" y1="82" x2="0" y2="140" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffe3a3"/><stop offset="0.5" stop-color="#ffa48f"/><stop offset="1" stop-color="#ff4fd8"/>
+    </linearGradient>
+    <mask id="cuts" maskUnits="userSpaceOnUse" x="0" y="0" width="680" height="260">
+      <rect width="680" height="260" fill="#fff"/>
+      <rect x="270" y="112" width="140" height="3" fill="#000"/>
+      <rect x="270" y="122" width="140" height="5" fill="#000"/>
+      <rect x="270" y="132" width="140" height="7" fill="#000"/>
+    </mask>
+    <filter id="g" x="-20%" y="-40%" width="140%" height="180%">
+      <feGaussianBlur stdDeviation="3.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path d="M282 140 A58 58 0 0 1 398 140 Z" fill="url(#sun)" mask="url(#cuts)" filter="url(#g)"/>
+  <path d="M40 140 H640" stroke="#9b85ff" stroke-opacity="0.6" stroke-width="2"/>
+  <path d="M326 140 L338 140 L320 260 L40 260 Z" fill="#4fdcef" fill-opacity="0.1"/>
+  <path d="M342 140 L354 140 L640 260 L360 260 Z" fill="#ffc76b" fill-opacity="0.1"/>
+  <g fill="none" stroke-width="3" stroke-linecap="round" filter="url(#g)">
+    <path d="M326 140 L40 260 M338 140 L320 260" stroke="#4fdcef"/>
+    <path d="M342 140 L360 260 M354 140 L640 260" stroke="#ffc76b"/>
+  </g>
+  <g fill="none" stroke="#0c0d16" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+    <g transform="translate(196 198) scale(0.9)">
+      <path d="M12 -38 L0 0 M12 -38 L36 -22 L44 -42 M12 -38 L-10 -24 L-24 -8 M0 0 L26 14 L20 44 M0 0 L-18 24 L-44 36" stroke-width="15"/>
+      <circle cx="20" cy="-62" r="15" stroke-width="13"/>
+    </g>
+    <g transform="translate(476 198) scale(0.9)">
+      <path d="M12 -38 L0 0 M12 -38 L36 -22 L44 -42 M12 -38 L-10 -24 L-24 -8 M0 0 L26 14 L20 44 M0 0 L-18 24 L-44 36" stroke-width="15"/>
+      <circle cx="20" cy="-62" r="15" stroke-width="13"/>
+    </g>
+  </g>
+  <g filter="url(#g)">
+    <g transform="translate(196 198) scale(0.9)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M0 0 L26 14 L20 44 M0 0 L-18 24 L-44 36" stroke="#9b85ff" stroke-width="7.5"/>
+      <path d="M12 -38 L0 0" stroke="#f4f1ec" stroke-width="7.5"/>
+      <path d="M12 -38 L36 -22 L44 -42 M12 -38 L-10 -24 L-24 -8" stroke="#4fdcef" stroke-width="6.5"/>
+      <circle cx="20" cy="-62" r="15" fill="#4fdcef" fill-opacity="0.18" stroke="#f4f1ec" stroke-width="5.5"/>
+    </g>
+    <g transform="translate(476 198) scale(0.9)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M0 0 L26 14 L20 44 M0 0 L-18 24 L-44 36" stroke="#ffb48c" stroke-width="7.5"/>
+      <path d="M12 -38 L0 0" stroke="#f4f1ec" stroke-width="7.5"/>
+      <path d="M12 -38 L36 -22 L44 -42 M12 -38 L-10 -24 L-24 -8" stroke="#ffc76b" stroke-width="6.5"/>
+      <circle cx="20" cy="-62" r="15" fill="#ffc76b" fill-opacity="0.2" stroke="#f4f1ec" stroke-width="5.5"/>
+    </g>
+  </g>
+</svg>

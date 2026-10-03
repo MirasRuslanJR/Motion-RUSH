@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Energy orb pickup. -->
+  <defs>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#4fdcef" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#4fdcef" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="core" cx="0.42" cy="0.38" r="0.62">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.45" stop-color="#bdf5ff"/>
+      <stop offset="1" stop-color="#2bb8d6"/>
+    </radialGradient>
+  </defs>
+  <circle cx="64" cy="64" r="62" fill="url(#halo)"/>
+  <circle cx="64" cy="64" r="34" fill="none" stroke="#4fdcef" stroke-width="3" opacity="0.75"/>
+  <circle cx="64" cy="64" r="24" fill="url(#core)"/>
+  <path d="M100 18 Q101 27 110 28 Q101 29 100 38 Q99 29 90 28 Q99 27 100 18 Z" fill="#ffffff"/>
+  <path d="M26 86 Q27 93 34 94 Q27 95 26 102 Q25 95 18 94 Q25 93 26 86 Z" fill="#ffffff" opacity="0.9"/>
+  <path d="M104 90 Q104.6 95 110 96 Q104.6 97 104 102 Q103.4 97 98 96 Q103.4 95 104 90 Z" fill="#ffffff" opacity="0.8"/>
+</svg>

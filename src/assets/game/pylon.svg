@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="400" viewBox="0 0 120 400">
+  <!-- Laser emitter at each end of the duck beam. The lens centre sits 46/400 from the top. -->
+  <defs>
+    <linearGradient id="col" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#241c4c"/>
+      <stop offset="0.5" stop-color="#161232"/>
+      <stop offset="1" stop-color="#0d0b20"/>
+    </linearGradient>
+    <radialGradient id="lens" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.35" stop-color="#ffc2ee"/>
+      <stop offset="0.7" stop-color="#ff5ad1" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ff5ad1" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-60%" y="-20%" width="220%" height="140%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <path d="M20 398 L32 356 L88 356 L100 398 Z" fill="#141029" stroke="#9b85ff" stroke-width="3" stroke-linejoin="round"/>
+  <rect x="38" y="76" width="44" height="284" rx="8" fill="url(#col)" stroke="#9b85ff" stroke-width="3"/>
+  <g stroke="#9b85ff" stroke-width="4" stroke-linecap="round" filter="url(#glow)">
+    <path d="M48 100 V336"/><path d="M72 100 V336"/>
+  </g>
+  <g stroke="#4fdcef" stroke-width="3" stroke-linecap="round" opacity="0.85">
+    <path d="M53 150 H67"/><path d="M53 210 H67"/><path d="M53 270 H67"/>
+  </g>
+  <rect x="24" y="18" width="72" height="58" rx="16" fill="#1c1640" stroke="#d6ccff" stroke-width="3"/>
+  <circle cx="60" cy="46" r="40" fill="url(#lens)"/>
+  <circle cx="60" cy="46" r="12" fill="#ffffff" stroke="#ff8fd8" stroke-width="4" filter="url(#glow)"/>
+</svg>

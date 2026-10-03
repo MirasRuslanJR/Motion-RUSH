@@ -7,6 +7,7 @@ import { NicknameField } from '../components/NicknameField';
 import { GESTURE_CONFIG } from '../config/gesture.config';
 import type { MotionEngine } from '../features/engine/MotionEngine';
 import { lateralOffset } from '../features/gestures/thresholds';
+import { modeArt } from '../features/modes/modeArt';
 import { GAME_MODES, MODE_CATEGORIES, type GameModeDef, type GameModeId, type ModeCategory } from '../features/modes/modes';
 import { useEngineFrame, useGestureEvents, useMotionUi } from '../hooks/useEngine';
 import { sfx } from '../lib/audio/sfx';
@@ -327,9 +328,7 @@ export function ModeSelectScreen({ engine, profile, initialMode, onSelect, onLea
                   aria-hidden={hidden}
                   aria-label={m.title}
                 >
-                  <span className="mode-card__mark" aria-hidden="true">
-                    <ModeIcon name={m.icon} size={170} />
-                  </span>
+                  <img className="mode-card__art" src={modeArt(m.id)} alt="" draggable={false} />
                   <span className="mode-card__head">
                     <span className="mode-card__icon">
                       <ModeIcon name={m.icon} size={26} />

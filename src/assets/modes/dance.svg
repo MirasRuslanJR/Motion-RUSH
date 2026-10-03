@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="260" viewBox="0 0 680 260">
+  <!-- Dance Floor: strike the pose on the beat. -->
+  <defs>
+    <linearGradient id="spot" x1="0" y1="0" x2="0" y2="214" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff8fd8" stop-opacity="0.45"/><stop offset="1" stop-color="#ff8fd8" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="g" x="-20%" y="-40%" width="140%" height="180%">
+      <feGaussianBlur stdDeviation="3.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path d="M96 0 L156 0 L372 214 L300 214 Z" fill="url(#spot)"/>
+  <path d="M584 0 L524 0 L308 214 L380 214 Z" fill="url(#spot)"/>
+  <path fill="#ff5ad1" fill-opacity="0.3" d="M191 170 L240 170 L205 195 L138 195 Z M290 170 L340 170 L340 195 L273 195 Z M390 170 L440 170 L475 195 L407 195 Z M205 195 L273 195 L251 225 L162 225 Z M340 195 L407 195 L429 225 L340 225 Z M475 195 L542 195 L606 225 L518 225 Z M74 225 L162 225 L113 260 L0 260 Z M251 225 L340 225 L340 260 L227 260 Z M429 225 L518 225 L567 260 L453 260 Z"/>
+  <path fill="#9b85ff" fill-opacity="0.16" d="M240 170 L290 170 L273 195 L205 195 Z M340 170 L390 170 L407 195 L340 195 Z M440 170 L489 170 L542 195 L475 195 Z M138 195 L205 195 L162 225 L74 225 Z M273 195 L340 195 L340 225 L251 225 Z M407 195 L475 195 L518 225 L429 225 Z M162 225 L251 225 L227 260 L113 260 Z M340 225 L429 225 L453 260 L340 260 Z M518 225 L606 225 L680 260 L567 260 Z"/>
+  <path d="M191 170 H489" stroke="#ff8fd8" stroke-width="3" filter="url(#g)"/>
+  <g fill="none" stroke="#0c0d16" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+    <path d="M340 92 L340 140 M340 92 L312 64 L300 34 M340 92 L370 64 L386 36 M340 140 L322 172 L314 206 M340 140 L366 166 L388 186" stroke-width="14"/>
+    <circle cx="340" cy="68" r="15" stroke-width="12"/>
+  </g>
+  <g filter="url(#g)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M340 140 L322 172 L314 206 M340 140 L366 166 L388 186" stroke="#9b85ff" stroke-width="7"/>
+    <path d="M340 92 L340 140" stroke="#f4f1ec" stroke-width="7"/>
+    <path d="M340 92 L312 64 L300 34 M340 92 L370 64 L386 36" stroke="#ff8fd8" stroke-width="6"/>
+    <circle cx="340" cy="68" r="15" fill="#ff8fd8" fill-opacity="0.2" stroke="#f4f1ec" stroke-width="5"/>
+  </g>
+  <g filter="url(#g)">
+    <g fill="#ff8fd8">
+      <ellipse cx="170" cy="104" rx="11" ry="8" transform="rotate(-20 170 104)"/>
+      <path d="M179 101 V60 Q192 68 196 82" fill="none" stroke="#ff8fd8" stroke-width="4" stroke-linecap="round"/>
+    </g>
+    <g fill="#4fdcef">
+      <ellipse cx="506" cy="78" rx="10" ry="7" transform="rotate(-20 506 78)"/>
+      <path d="M514 75 V40 Q526 47 530 60" fill="none" stroke="#4fdcef" stroke-width="4" stroke-linecap="round"/>
+    </g>
+    <g fill="#9b85ff">
+      <ellipse cx="566" cy="138" rx="8" ry="6" transform="rotate(-20 566 138)"/>
+      <path d="M573 136 V108" fill="none" stroke="#9b85ff" stroke-width="3.5" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>

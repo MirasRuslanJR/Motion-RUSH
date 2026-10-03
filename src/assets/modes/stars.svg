@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="260" viewBox="0 0 680 260">
+  <!-- Star Catch: reach for the stars, avoid the bomb. -->
+  <defs>
+    <linearGradient id="gold" x1="0" y1="-1" x2="0" y2="1" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff3b8"/><stop offset="1" stop-color="#ffc24a"/>
+    </linearGradient>
+    <radialGradient id="bomb" cx="0.38" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#ff9a8a"/><stop offset="1" stop-color="#c8283c"/>
+    </radialGradient>
+    <path id="star" d="M0 -1 L0.247 -0.34 L0.951 -0.309 L0.399 0.13 L0.588 0.809 L0 0.42 L-0.588 0.809 L-0.399 0.13 L-0.951 -0.309 L-0.247 -0.34 Z"/>
+    <path id="spark" d="M0 -1 Q0.12 -0.12 1 0 Q0.12 0.12 0 1 Q-0.12 0.12 -1 0 Q-0.12 -0.12 0 -1 Z"/>
+    <filter id="g" x="-20%" y="-40%" width="140%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <circle cx="340" cy="80" r="58" fill="none" stroke="#f4f1ec" stroke-opacity="0.5" stroke-width="3" stroke-dasharray="260 400" stroke-linecap="round" transform="rotate(-90 340 80)"/>
+  <g filter="url(#g)" fill="url(#gold)">
+    <use href="#star" transform="translate(340 80) scale(42)"/>
+    <use href="#star" transform="translate(196 70) scale(26)"/>
+    <use href="#star" transform="translate(488 58) scale(30)"/>
+    <use href="#star" transform="translate(566 150) scale(18)"/>
+    <use href="#star" transform="translate(118 150) scale(16)"/>
+  </g>
+  <g fill="#ffffff">
+    <use href="#spark" transform="translate(262 40) scale(8)"/>
+    <use href="#spark" transform="translate(420 104) scale(7)"/>
+    <use href="#spark" transform="translate(150 104) scale(6)"/>
+    <use href="#spark" transform="translate(540 92) scale(6)"/>
+  </g>
+  <g fill="none" stroke="#0c0d16" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+    <path d="M250 262 L232 192 L300 120"/><path d="M432 262 L452 190 L382 114"/>
+  </g>
+  <g filter="url(#g)">
+    <g fill="none" stroke="#4fdcef" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M250 262 L232 192 L300 120"/><path d="M432 262 L452 190 L382 114"/>
+    </g>
+    <circle cx="300" cy="120" r="10" fill="#f4f1ec"/>
+    <circle cx="382" cy="114" r="10" fill="#f4f1ec"/>
+  </g>
+  <g transform="translate(592 210)">
+    <g stroke="#ff6b57" stroke-width="5" stroke-linecap="round">
+      <path d="M0 -26 V-36 M18.4 -18.4 L25.5 -25.5 M26 0 H36 M18.4 18.4 L25.5 25.5 M0 26 V36 M-18.4 18.4 L-25.5 25.5 M-26 0 H-36 M-18.4 -18.4 L-25.5 -25.5"/>
+    </g>
+    <circle r="25" fill="url(#bomb)" stroke="#ffb3a8" stroke-width="2"/>
+    <path d="M-8 -8 L8 8 M8 -8 L-8 8" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</svg>

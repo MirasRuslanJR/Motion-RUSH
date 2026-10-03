@@ -8,6 +8,7 @@ import { buildSyntheticPose } from '../tracking/syntheticPose';
 import { observeCanvas, type CanvasSize } from './canvas';
 import { PALETTE, rgba } from './palette';
 import { ParticleSystem } from './particles';
+import { BACKDROP, loadImage, preloadSprites, PYLON_LENS_Y, sprite } from './sprites';
 
 const Z_FAR = 12;
 const FOCAL = 1.4;
@@ -100,6 +101,9 @@ export class GameRenderer {
   private reducedMotion = false;
   /** Soft glow passes (off on the lowest quality level). */
   private glow = true;
+  /** Horizon art (sun, mountains, city), painted on the static background once it loads. */
+  private backdrop: HTMLImageElement | null = null;
+  private disposed = false;
   private opponent: OpponentGhost | null = null;
   private readonly ghostPose: Pose = createPose();
   private ghostLane = 0;
@@ -119,6 +123,17 @@ export class GameRenderer {
     this.backgroundCtx = background.getContext('2d', { alpha: false });
     // Soft gradients and 1-px stars do not need retina resolution.
     this.backgroundSizing = observeCanvas(background, (size) => this.drawBackground(size), 1);
+    preloadSprites();
+    void loadImage(BACKDROP.url).then(
+      (img) => {
+        if (this.disposed) return;
+        this.backdrop = img;
+        this.drawBackground(this.backgroundSizing.size);
+      },
+      () => {
+        // The plain night sky stays.
+      },
+    );
   }
 
   setReducedMotion(reduced: boolean): void {
@@ -131,6 +146,7 @@ export class GameRenderer {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.sizing.dispose();
     this.backgroundSizing.dispose();
   }
@@ -332,6 +348,14 @@ export class GameRenderer {
       ctx.fillStyle = rgba(PALETTE.white, 0.15 + rand() * 0.45);
       ctx.fillRect(rand() * w, rand() * horizon * 0.95, 1.2, 1.2);
     }
+    const art = this.backdrop;
+    if (art) {
+      // The sun, mountains and city stand on the horizon line; never a thin strip on narrow screens.
+      const aspect = BACKDROP.width / BACKDROP.height;
+      const dh = Math.max(w / aspect, horizon * 0.5);
+      const dw = dh * aspect;
+      ctx.drawImage(art, (w - dw) / 2, horizon - dh, dw, dh);
+    }
     ctx.strokeStyle = rgba(PALETTE.cyan, 0.5);
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -431,6 +455,7 @@ export class GameRenderer {
       case 'GATE_LEFT':
       case 'GATE_RIGHT':
       case 'GATE_CENTER': {
+        const wall = sprite('wall');
         for (const lane of [-1, 0, 1]) {
           const x0 = this.laneX(g, lane - 0.47, z);
           const x1 = this.laneX(g, lane + 0.47, z);
@@ -442,7 +467,17 @@ export class GameRenderer {
             this.drawChevron(ctx, (x0 + x1) / 2, top - unit * 0.28, unit * 0.22, item.lane === 0 ? 'down' : item.lane < 0 ? 'left' : 'right', tint ?? PALETTE.cyan, isNext);
             continue;
           }
-          // Flat translucent fill (a per-wall gradient every frame is wasted work on weak GPUs).
+          if (wall) {
+            // Force-field wall sprite; a hit or a pass outlines it in the verdict colour.
+            ctx.drawImage(wall, x0, top, x1 - x0, baseY - top);
+            if (tint) {
+              ctx.strokeStyle = rgba(tint, 0.95);
+              ctx.lineWidth = Math.max(2, unit * 0.04);
+              ctx.strokeRect(x0, top, x1 - x0, baseY - top);
+            }
+            continue;
+          }
+          // Vector fallback while the sprite loads. Flat translucent fill (a per-wall gradient every frame is wasted work on weak GPUs).
           ctx.fillStyle = rgba(tint ?? PALETTE.violet, 0.34);
           ctx.fillRect(x0, top, x1 - x0, baseY - top);
           ctx.strokeStyle = rgba(tint ?? PALETTE.violet, 1);
@@ -464,14 +499,23 @@ export class GameRenderer {
         const x0 = this.laneX(g, -1.5, z);
         const x1 = this.laneX(g, 1.5, z);
         const y = baseY - unit * 0.3;
-        this.drawBeamLine(ctx, x0, x1, y, unit * 0.07, tint ?? PALETTE.cyan);
-        ctx.strokeStyle = rgba(tint ?? PALETTE.cyan, 0.7);
-        ctx.lineWidth = Math.max(1, unit * 0.025);
-        for (const x of [x0, x1]) {
-          ctx.beginPath();
-          ctx.moveTo(x, baseY);
-          ctx.lineTo(x, y);
-          ctx.stroke();
+        const hurdle = sprite('hurdle');
+        if (hurdle) {
+          // One hurdle per lane, standing on the track.
+          const hw = unit * 0.88;
+          const hh = (hw * hurdle.height) / hurdle.width;
+          for (const lane of [-1, 0, 1]) ctx.drawImage(hurdle, this.laneX(g, lane, z) - hw / 2, baseY - hh, hw, hh);
+          if (tint) this.drawBeamLine(ctx, x0, x1, baseY - hh * 0.7, unit * 0.05, tint);
+        } else {
+          this.drawBeamLine(ctx, x0, x1, y, unit * 0.07, tint ?? PALETTE.cyan);
+          ctx.strokeStyle = rgba(tint ?? PALETTE.cyan, 0.7);
+          ctx.lineWidth = Math.max(1, unit * 0.025);
+          for (const x of [x0, x1]) {
+            ctx.beginPath();
+            ctx.moveTo(x, baseY);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+          }
         }
         for (const lane of [-1, 0, 1]) this.drawChevron(ctx, this.laneX(g, lane, z), y - unit * 0.35, unit * 0.16, 'up', tint ?? PALETTE.cyan, isNext);
         break;
@@ -480,13 +524,21 @@ export class GameRenderer {
         const x0 = this.laneX(g, -1.6, z);
         const x1 = this.laneX(g, 1.6, z);
         const y = baseY - unit * 0.98;
-        ctx.strokeStyle = rgba(PALETTE.violet, 0.8);
-        ctx.lineWidth = Math.max(1.5, unit * 0.04);
-        for (const x of [x0, x1]) {
-          ctx.beginPath();
-          ctx.moveTo(x, baseY);
-          ctx.lineTo(x, y - unit * 0.12);
-          ctx.stroke();
+        const pylon = sprite('pylon');
+        if (pylon) {
+          // Emitter pylons at both ends; the beam runs through their lenses.
+          const ph = (unit * 0.98) / (1 - PYLON_LENS_Y);
+          const pw = (ph * pylon.width) / pylon.height;
+          for (const x of [x0, x1]) ctx.drawImage(pylon, x - pw / 2, baseY - ph, pw, ph);
+        } else {
+          ctx.strokeStyle = rgba(PALETTE.violet, 0.8);
+          ctx.lineWidth = Math.max(1.5, unit * 0.04);
+          for (const x of [x0, x1]) {
+            ctx.beginPath();
+            ctx.moveTo(x, baseY);
+            ctx.lineTo(x, y - unit * 0.12);
+            ctx.stroke();
+          }
         }
         this.drawBeamLine(ctx, x0, x1, y, unit * 0.05, tint ?? PALETTE.violet);
         for (const lane of [-1, 0, 1]) this.drawChevron(ctx, this.laneX(g, lane, z), y + unit * 0.3, unit * 0.16, 'down', tint ?? PALETTE.violet, isNext);
@@ -495,6 +547,12 @@ export class GameRenderer {
       case 'ORB': {
         const x = this.laneX(g, item.lane, z);
         const y = baseY - unit * 0.5;
+        const orb = sprite('orb');
+        if (orb) {
+          const size = unit * (0.5 + Math.sin(now / 160) * 0.04);
+          ctx.drawImage(orb, x - size / 2, y - size / 2, size, size);
+          break;
+        }
         const r = unit * (0.11 + Math.sin(now / 160) * 0.015);
         ctx.globalCompositeOperation = 'lighter';
         if (this.glow) {
@@ -513,6 +571,13 @@ export class GameRenderer {
       case 'BOOST': {
         const x = this.laneX(g, item.lane, z);
         const y = baseY - unit * 0.55;
+        const icon = sprite(item.kind === 'SHIELD' ? 'shield' : 'boost');
+        if (icon) {
+          const size = unit * (0.62 + Math.sin(now / 200) * 0.03);
+          const bob = Math.sin(now / 260) * unit * 0.03;
+          ctx.drawImage(icon, x - size / 2, y - size / 2 + bob, size, size);
+          break;
+        }
         const r = unit * (0.17 + Math.sin(now / 200) * 0.015);
         const color = item.kind === 'SHIELD' ? PALETTE.success : PALETTE.warn;
         ctx.globalCompositeOperation = 'lighter';

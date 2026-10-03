@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="260" viewBox="0 0 680 260">
+  <!-- Dance Battle: two dancers, one choreography. -->
+  <defs>
+    <linearGradient id="spot" x1="0" y1="0" x2="0" y2="214" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff8fd8" stop-opacity="0.4"/><stop offset="1" stop-color="#ff8fd8" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="g" x="-20%" y="-40%" width="140%" height="180%">
+      <feGaussianBlur stdDeviation="3.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path d="M310 0 L370 0 L420 214 L260 214 Z" fill="url(#spot)"/>
+  <path fill="#ff5ad1" fill-opacity="0.26" d="M191 170 L240 170 L205 195 L138 195 Z M290 170 L340 170 L340 195 L273 195 Z M390 170 L440 170 L475 195 L407 195 Z M205 195 L273 195 L251 225 L162 225 Z M340 195 L407 195 L429 225 L340 225 Z M475 195 L542 195 L606 225 L518 225 Z M74 225 L162 225 L113 260 L0 260 Z M251 225 L340 225 L340 260 L227 260 Z M429 225 L518 225 L567 260 L453 260 Z"/>
+  <path fill="#9b85ff" fill-opacity="0.14" d="M240 170 L290 170 L273 195 L205 195 Z M340 170 L390 170 L407 195 L340 195 Z M440 170 L489 170 L542 195 L475 195 Z M138 195 L205 195 L162 225 L74 225 Z M273 195 L340 195 L340 225 L251 225 Z M407 195 L475 195 L518 225 L429 225 Z M162 225 L251 225 L227 260 L113 260 Z M340 225 L429 225 L453 260 L340 260 Z M518 225 L606 225 L680 260 L567 260 Z"/>
+  <path d="M191 170 H489" stroke="#ff8fd8" stroke-width="3" filter="url(#g)"/>
+  <g fill="none" stroke="#0c0d16" stroke-linecap="round" stroke-linejoin="round" opacity="0.9" stroke-width="14">
+    <path d="M250 94 L250 142 M250 94 L222 70 L206 44 M250 94 L280 100 L306 86 M250 142 L234 174 L228 208 M250 142 L270 172 L276 206"/>
+    <path d="M430 94 L430 142 M430 94 L458 70 L474 44 M430 94 L400 100 L374 86 M430 142 L446 174 L452 208 M430 142 L410 172 L404 206"/>
+  </g>
+  <g fill="none" stroke="#0c0d16" stroke-width="12" opacity="0.9">
+    <circle cx="250" cy="70" r="15"/><circle cx="430" cy="70" r="15"/>
+  </g>
+  <g filter="url(#g)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M250 142 L234 174 L228 208 M250 142 L270 172 L276 206" stroke="#9b85ff" stroke-width="7"/>
+    <path d="M250 94 L250 142" stroke="#f4f1ec" stroke-width="7"/>
+    <path d="M250 94 L222 70 L206 44 M250 94 L280 100 L306 86" stroke="#4fdcef" stroke-width="6"/>
+    <circle cx="250" cy="70" r="15" fill="#4fdcef" fill-opacity="0.18" stroke="#f4f1ec" stroke-width="5"/>
+    <path d="M430 142 L446 174 L452 208 M430 142 L410 172 L404 206" stroke="#ffb48c" stroke-width="7"/>
+    <path d="M430 94 L430 142" stroke="#f4f1ec" stroke-width="7"/>
+    <path d="M430 94 L458 70 L474 44 M430 94 L400 100 L374 86" stroke="#ffc76b" stroke-width="6"/>
+    <circle cx="430" cy="70" r="15" fill="#ffc76b" fill-opacity="0.2" stroke="#f4f1ec" stroke-width="5"/>
+  </g>
+  <g filter="url(#g)">
+    <g fill="#ff8fd8">
+      <ellipse cx="334" cy="56" rx="10" ry="7" transform="rotate(-20 334 56)"/>
+      <path d="M342 53 V20 Q354 27 358 40" fill="none" stroke="#ff8fd8" stroke-width="4" stroke-linecap="round"/>
+    </g>
+    <g fill="#9b85ff">
+      <ellipse cx="120" cy="116" rx="8" ry="6" transform="rotate(-20 120 116)"/>
+      <path d="M127 114 V86" fill="none" stroke="#9b85ff" stroke-width="3.5" stroke-linecap="round"/>
+    </g>
+    <g fill="#4fdcef">
+      <ellipse cx="560" cy="110" rx="8" ry="6" transform="rotate(-20 560 110)"/>
+      <path d="M567 108 V80" fill="none" stroke="#4fdcef" stroke-width="3.5" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>

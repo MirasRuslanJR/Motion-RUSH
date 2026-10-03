@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="260" viewBox="0 0 680 260">
+  <!-- Squat 30: a deep squat and the depth gauge that counts it. -->
+  <defs>
+    <filter id="g" x="-20%" y="-40%" width="140%" height="180%">
+      <feGaussianBlur stdDeviation="3.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path d="M150 232 H600" stroke="#9b85ff" stroke-opacity="0.5" stroke-width="3"/>
+  <path d="M236 179 H430" stroke="#5ee8a8" stroke-width="2.5" stroke-dasharray="6 8" stroke-linecap="round"/>
+  <g fill="none" stroke="#0c0d16" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+    <path d="M322 118 L288 178 M288 178 L346 180 L336 230 M322 118 L360 128 L398 126" stroke-width="14"/>
+    <circle cx="330" cy="92" r="15" stroke-width="12"/>
+  </g>
+  <g filter="url(#g)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M288 178 L340 186 L326 231" stroke="#6f5fd0" stroke-width="7"/>
+    <path d="M288 178 L346 180 L336 230" stroke="#9b85ff" stroke-width="7"/>
+    <path d="M322 118 L288 178" stroke="#f4f1ec" stroke-width="7"/>
+    <path d="M322 118 L360 128 L398 126" stroke="#4fdcef" stroke-width="6"/>
+    <circle cx="330" cy="92" r="15" fill="#4fdcef" fill-opacity="0.18" stroke="#f4f1ec" stroke-width="5"/>
+  </g>
+  <path d="M458 180 A62 62 0 0 1 582 180" fill="none" stroke="#9b85ff" stroke-opacity="0.35" stroke-width="12" stroke-linecap="round"/>
+  <path d="M458 180 A62 62 0 0 1 575.2 151.9" fill="none" stroke="#5ee8a8" stroke-width="12" stroke-linecap="round" filter="url(#g)"/>
+  <g stroke="#9b85ff" stroke-width="3" stroke-linecap="round">
+    <path d="M448 180 H440 M469.1 129.1 L463.4 123.4 M520 108 V100 M570.9 129.1 L576.6 123.4 M592 180 H600"/>
+  </g>
+  <path d="M520 180 L562.8 158.2" stroke="#f4f1ec" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="520" cy="180" r="7" fill="#f4f1ec"/>
+</svg>
