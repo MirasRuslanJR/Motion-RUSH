@@ -151,7 +151,7 @@ const ALL_MODES: readonly GameModeDef[] = [
     kind: 'dance',
     title: 'Dance Floor',
     badge: 'НОВОЕ',
-    tagline: 'Танцпол: повторяй позы в такт музыке — чем точнее, тем больше очков',
+    tagline: 'Танцпол всем телом: позы рук, приседы, прыжки и шаги в такт музыке',
     accent: '#ff5ad1',
     course: 'standard',
     energy: GAME_CONFIG.energy,

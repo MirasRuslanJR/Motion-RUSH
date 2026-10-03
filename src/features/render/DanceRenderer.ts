@@ -1,5 +1,5 @@
-import { distance, midpoint, type Point } from '../../lib/math/geometry';
-import { BEAT_MS, DANCE_CONFIG, type DanceGrade, type DanceMove, type DancePose } from '../dance/dance';
+import { clamp, distance, midpoint, type Point } from '../../lib/math/geometry';
+import { BEAT_MS, DANCE_CONFIG, type BodyOffset, type DanceGrade, type DanceMove, type DancePose } from '../dance/dance';
 import { LM, lm, type Pose } from '../tracking/landmarks';
 import { observeCanvas } from './canvas';
 import { PALETTE, rgba } from './palette';
@@ -37,6 +37,8 @@ export interface DancerView {
   pose: Pose | null;
   /** Latest judged grade flash. */
   combo: number;
+  /** Where the body is relative to the dancer's standing spot (squat, jump, step), in shoulder widths. */
+  offset?: BodyOffset | null;
 }
 
 /** Arm end point for a pose angle (0° down, 90° out, 180° up) — mirrors dance.ts. */
@@ -45,11 +47,74 @@ function armEnd(shoulder: Point, deg: number, outward: -1 | 1, length: number): 
   return { x: shoulder.x + outward * Math.sin(rad) * length, y: shoulder.y + Math.cos(rad) * length };
 }
 
-/** Stick figure of a dance pose, shoulders centred at (cx, cy), `unit` = shoulder width. */
-export function drawPoseFigure(ctx: CanvasRenderingContext2D, pose: DancePose, cx: number, cy: number, unit: number, color: string, dashed = false): void {
-  const ls = { x: cx - unit / 2, y: cy };
-  const rs = { x: cx + unit / 2, y: cy };
-  const hip = { x: cx, y: cy + unit * 1.35 };
+/** How far a whole-body move moves the shoulders, in shoulder widths (the ghost on the dancer shows it). */
+export function bodyShift(pose: DancePose): BodyOffset {
+  switch (pose.body) {
+    case 'squat':
+      return { x: 0, y: 0.4 };
+    case 'jump':
+      return { x: 0, y: -0.32 };
+    case 'step-left':
+      return { x: -0.6, y: 0 };
+    case 'step-right':
+      return { x: 0.6, y: 0 };
+    default:
+      return { x: 0, y: 0 };
+  }
+}
+
+/**
+ * Leg lines of a figure whose shoulders are at (cx, cy) and whose feet stand on `groundY`:
+ * straight when standing, knees out in a squat, tucked in a jump, wide in a step.
+ */
+function legPath(ctx: CanvasRenderingContext2D, pose: DancePose, cx: number, hipY: number, groundY: number, unit: number): void {
+  const leg = (kx: number, ky: number, fx: number, fy: number) => {
+    ctx.moveTo(cx, hipY);
+    ctx.lineTo(kx, ky);
+    ctx.lineTo(fx, fy);
+  };
+  switch (pose.body) {
+    case 'squat':
+      for (const s of [-1, 1]) leg(cx + s * unit * 0.6, (hipY + groundY) / 2 - unit * 0.05, cx + s * unit * 0.42, groundY);
+      break;
+    case 'jump':
+      for (const s of [-1, 1]) leg(cx + s * unit * 0.32, hipY + unit * 0.6, cx + s * unit * 0.3, hipY + unit * 1.12);
+      break;
+    case 'step-left':
+    case 'step-right': {
+      const d = pose.body === 'step-left' ? -1 : 1;
+      leg(cx + d * unit * 0.4, (hipY + groundY) / 2, cx + d * unit * 0.75, groundY);
+      leg(cx - d * unit * 0.12, (hipY + groundY) / 2, cx - d * unit * 0.22, groundY);
+      break;
+    }
+    default:
+      leg(cx - unit * 0.17, (hipY + groundY) / 2, cx - unit * 0.35, groundY);
+      leg(cx + unit * 0.17, (hipY + groundY) / 2, cx + unit * 0.35, groundY);
+  }
+}
+
+/**
+ * Stick figure of a dance move, `unit` = shoulder width. (cx, cy) is where the shoulders are
+ * when standing; with `moveBody` the figure itself squats, jumps or steps (the ghost on the
+ * dancer), otherwise it stays in place and the legs and a marker show the body move (cards).
+ */
+export function drawPoseFigure(
+  ctx: CanvasRenderingContext2D,
+  pose: DancePose,
+  cx: number,
+  cy: number,
+  unit: number,
+  color: string,
+  dashed = false,
+  moveBody = false,
+): void {
+  const groundY = cy + unit * 2.65;
+  const shift = moveBody ? bodyShift(pose) : { x: 0, y: pose.body === 'squat' ? 0.3 : pose.body === 'jump' ? -0.2 : 0 };
+  const sx = cx + shift.x * unit;
+  const sy = cy + shift.y * unit;
+  const ls = { x: sx - unit / 2, y: sy };
+  const rs = { x: sx + unit / 2, y: sy };
+  const hipY = sy + unit * (pose.body === 'squat' ? 1.2 : 1.35);
   ctx.save();
   ctx.strokeStyle = color;
   ctx.lineCap = 'round';
@@ -59,12 +124,9 @@ export function drawPoseFigure(ctx: CanvasRenderingContext2D, pose: DancePose, c
   ctx.beginPath();
   ctx.moveTo(ls.x, ls.y);
   ctx.lineTo(rs.x, rs.y);
-  ctx.moveTo(cx, cy);
-  ctx.lineTo(hip.x, hip.y);
-  ctx.moveTo(hip.x, hip.y);
-  ctx.lineTo(hip.x - unit * 0.35, hip.y + unit * 1.3);
-  ctx.moveTo(hip.x, hip.y);
-  ctx.lineTo(hip.x + unit * 0.35, hip.y + unit * 1.3);
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(sx, hipY);
+  legPath(ctx, pose, sx, hipY, groundY, unit);
   const l = armEnd(ls, pose.left, -1, unit * 1.45);
   const r = armEnd(rs, pose.right, 1, unit * 1.45);
   ctx.moveTo(ls.x, ls.y);
@@ -74,7 +136,31 @@ export function drawPoseFigure(ctx: CanvasRenderingContext2D, pose: DancePose, c
   ctx.stroke();
   ctx.setLineDash([]);
   ctx.beginPath();
-  ctx.arc(cx, cy - unit * 0.55, unit * 0.3, 0, Math.PI * 2);
+  ctx.arc(sx, sy - unit * 0.55, unit * 0.3, 0, Math.PI * 2);
+  ctx.stroke();
+  // Markers that read at card size: air under a jump, an arrow for a step, a floor line under a squat.
+  ctx.lineWidth = Math.max(1.5, unit * 0.1);
+  ctx.beginPath();
+  if (pose.body === 'jump') {
+    const fy = hipY + unit * 1.12 + unit * 0.35;
+    ctx.moveTo(sx - unit * 0.55, fy);
+    ctx.lineTo(sx - unit * 0.15, fy);
+    ctx.moveTo(sx + unit * 0.15, fy);
+    ctx.lineTo(sx + unit * 0.55, fy);
+  } else if (pose.body === 'step-left' || pose.body === 'step-right') {
+    const d = pose.body === 'step-left' ? -1 : 1;
+    const ay = groundY + unit * 0.35;
+    const tip = sx + d * unit * 1.25;
+    ctx.moveTo(sx - d * unit * 0.2, ay);
+    ctx.lineTo(tip, ay);
+    ctx.moveTo(tip - d * unit * 0.32, ay - unit * 0.28);
+    ctx.lineTo(tip, ay);
+    ctx.lineTo(tip - d * unit * 0.32, ay + unit * 0.28);
+  } else if (pose.body === 'squat') {
+    ctx.moveTo(sx - unit * 0.3, sy - unit * 1.25);
+    ctx.lineTo(sx, sy - unit * 1.0);
+    ctx.lineTo(sx + unit * 0.3, sy - unit * 1.25);
+  }
   ctx.stroke();
   ctx.restore();
 }
@@ -129,9 +215,14 @@ export class DanceRenderer {
       ctx.fillStyle = spot;
       ctx.fillRect(cx - unit * 5, timelineH, unit * 10, h - timelineH);
       if (current && songTime >= current.at - DANCE_CONFIG.leadMs * 0.6) {
-        drawPoseFigure(ctx, current.pose, cx, cy, unit, rgba(PALETTE.white, 0.35), true);
+        // The ghost squats, jumps or steps where the dancer should go.
+        drawPoseFigure(ctx, current.pose, cx, cy, unit, rgba(PALETTE.white, 0.35), true, true);
       }
-      this.drawDancer(ctx, d.pose, cx, cy, unit, color);
+      // The dancer moves with their body: down in a squat, up in a jump, sideways in a step.
+      const off = d.offset;
+      const dx = off ? clamp(off.x, -1.5, 1.5) * unit : 0;
+      const dy = off ? clamp(off.y, -1.2, 1.2) * unit : 0;
+      this.drawDancer(ctx, d.pose, cx + dx, cy + dy, unit, color);
       if (n > 1) {
         ctx.fillStyle = color;
         ctx.font = '800 16px Unbounded, system-ui, sans-serif';

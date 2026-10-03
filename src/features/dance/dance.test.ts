@@ -4,14 +4,17 @@ import {
   angleDiff,
   armAngles,
   BEAT_MS,
+  bodyScore,
   danceAccuracy,
+  DanceBodyTracker,
   DanceEngine,
   danceHint,
   DANCE_CONFIG,
   DANCE_POSES,
   generateChoreography,
   poseMatch,
-  type ArmAngles,
+  type BodyOffset,
+  type DanceInput,
   type DancePose,
 } from './dance';
 
@@ -40,7 +43,36 @@ function poseWithArms(left: number, right: number): Pose {
   return pose;
 }
 
+/** Only the shoulders, centred at (x, y), shoulder width `sw`. */
+function shouldersAt(x: number, y: number, sw = 0.2): Pose {
+  const pose = createPose();
+  const ls = pose[LM.LEFT_SHOULDER];
+  const rs = pose[LM.RIGHT_SHOULDER];
+  if (ls && rs) {
+    Object.assign(ls, { x: x - sw / 2, y, v: 1 });
+    Object.assign(rs, { x: x + sw / 2, y, v: 1 });
+  }
+  return pose;
+}
+
+/** The body a dancer who does every move right has. */
+function bodyFor(pose: DancePose): BodyOffset {
+  switch (pose.body) {
+    case 'squat':
+      return { x: 0, y: 0.45 };
+    case 'jump':
+      return { x: 0, y: -0.25 };
+    case 'step-left':
+      return { x: -0.6, y: 0 };
+    case 'step-right':
+      return { x: 0.6, y: 0 };
+    default:
+      return { x: 0, y: 0 };
+  }
+}
+
 const byId = (id: string) => DANCE_POSES.find((p) => p.id === id) as DancePose;
+const still: BodyOffset = { x: 0, y: 0 };
 
 describe('dance floor', () => {
   it('reads arm directions from the skeleton', () => {
@@ -58,6 +90,40 @@ describe('dance floor', () => {
     expect(poseMatch(armAngles(poseWithArms(90, 0)), t)).toBeCloseTo(0.5);
   });
 
+  it('a whole-body move needs the body: arms alone are only half of it', () => {
+    const jump = byId('JUMP_V');
+    const arms = armAngles(poseWithArms(160, 160));
+    expect(poseMatch({ ...arms, body: still }, jump)).toBeCloseTo(0.5);
+    expect(poseMatch({ ...arms, body: { x: 0, y: -0.25 } }, jump)).toBe(1);
+    // A squat is not a jump, and a step to the wrong side is not a step.
+    expect(poseMatch({ ...arms, body: { x: 0, y: 0.4 } }, jump)).toBeCloseTo(0.5);
+    const stepLeft = byId('STEP_L');
+    const stepArms = armAngles(poseWithArms(stepLeft.left, stepLeft.right));
+    expect(poseMatch({ ...stepArms, body: { x: 0.6, y: 0 } }, stepLeft)).toBeLessThan(DANCE_CONFIG.good);
+    expect(poseMatch({ ...stepArms, body: { x: -0.6, y: 0 } }, stepLeft)).toBe(1);
+    expect(bodyScore('squat', null)).toBe(0);
+  });
+
+  it('measures squats, jumps and steps against where the dancer stands', () => {
+    const t = new DanceBodyTracker();
+    expect(t.update(shouldersAt(0.6, 0.4), 16, false)).toEqual({ x: 0, y: 0 });
+    const squat = t.update(shouldersAt(0.6, 0.48), 16, true);
+    expect(squat?.y).toBeCloseTo(0.4);
+    expect(bodyScore('squat', squat)).toBe(1);
+    expect(bodyScore('jump', t.update(shouldersAt(0.6, 0.35), 16, true))).toBe(1);
+    const step = t.update(shouldersAt(0.48, 0.4), 16, true);
+    expect(step?.x).toBeCloseTo(-0.6);
+    expect(bodyScore('step-left', step)).toBe(1);
+    expect(bodyScore('step-right', step)).toBe(0);
+    // Between body moves the spot follows a dancer who wandered off...
+    for (let i = 0; i < 600; i++) t.update(shouldersAt(0.48, 0.4), 16, false);
+    expect(Math.abs(t.update(shouldersAt(0.48, 0.4), 16, true)?.x ?? 1)).toBeLessThan(0.05);
+    // ...but a squat held between moves does not drag it down.
+    for (let i = 0; i < 600; i++) t.update(shouldersAt(0.48, 0.48), 16, false);
+    expect(t.update(shouldersAt(0.48, 0.48), 16, true)?.y).toBeCloseTo(0.4, 1);
+    expect(t.update(null, 16, false)).toBeNull();
+  });
+
   it('tells which arm to move and which way', () => {
     const v = byId('V');
     expect(danceHint(armAngles(poseWithArms(90, 155)), v)).toBe('Левую руку выше');
@@ -65,6 +131,19 @@ describe('dance floor', () => {
     expect(danceHint(armAngles(poseWithArms(155, 155)), v)).toMatch(/^Точно/);
     expect(danceHint(armAngles(poseWithArms(170, 15)), byId('LOW_V'))).toBe('Левую руку ниже, правую руку выше');
     expect(danceHint(null, v)).toMatch(/кадр/);
+  });
+
+  it('tells what the body still has to do in a whole-body move', () => {
+    const squat = byId('SQUAT_T');
+    const t = armAngles(poseWithArms(90, 90));
+    expect(danceHint({ ...t, body: still }, squat)).toBe('Присядь на бит');
+    expect(danceHint({ ...t, body: { x: 0, y: 0.2 } }, squat)).toBe('Присядь глубже');
+    expect(danceHint({ ...t, body: { x: 0, y: 0.4 } }, squat)).toMatch(/^Точно/);
+    expect(danceHint({ ...armAngles(poseWithArms(90, 15)), body: still }, squat)).toBe('Присядь на бит, правую руку выше');
+    expect(danceHint({ ...armAngles(poseWithArms(165, 20)), body: { x: -0.1, y: 0 } }, byId('STEP_L'))).toBe('Шагни влево');
+    expect(danceHint({ ...armAngles(poseWithArms(20, 165)), body: { x: 0.3, y: 0 } }, byId('STEP_R'))).toBe('Шагни ещё правее');
+    expect(danceHint({ ...armAngles(poseWithArms(160, 160)), body: still }, byId('JUMP_V'))).toBe('Подпрыгни на бит');
+    expect(danceHint({ ...armAngles(poseWithArms(0, 0)), body: still }, byId('JUMP_V'))).toBe('Подпрыгни на бит и руки как на карточке');
   });
 
   it('builds a random choreography on the beat, never repeating a pose twice in a row', () => {
@@ -79,13 +158,26 @@ describe('dance floor', () => {
     }
   });
 
-  it('judges two dancers independently: exact poses are PERFECT, standing still is a MISS', () => {
+  it('mixes whole-body moves into the dance: squats, jumps and steps to both sides in turn', () => {
+    for (const seed of [1, 5, 9]) {
+      const a = generateChoreography(seed);
+      const body = a.filter((m) => m.pose.body);
+      expect(body.length / a.length).toBeGreaterThan(0.35);
+      expect(new Set(body.map((m) => m.pose.body))).toEqual(new Set(['squat', 'jump', 'step-left', 'step-right']));
+      // A calm start: the first moves use the arms only.
+      expect(a.slice(0, 2).every((m) => !m.pose.body)).toBe(true);
+      const steps = body.filter((m) => m.pose.body?.startsWith('step')).map((m) => m.pose.body);
+      for (let i = 1; i < steps.length; i++) expect(steps[i]).not.toBe(steps[i - 1]);
+    }
+  });
+
+  it('judges two dancers independently: exact moves are PERFECT, standing still is a MISS', () => {
     const moves = generateChoreography(7);
     const dance = new DanceEngine(moves, 2);
     for (let t = 0; t <= dance.duration; t += 16) {
       const move = dance.current;
-      const perfect: ArmAngles | null = move ? armAngles(poseWithArms(move.pose.left, move.pose.right)) : null;
-      dance.update(t, [perfect, armAngles(poseWithArms(0, 0))]);
+      const perfect: DanceInput | null = move ? { ...armAngles(poseWithArms(move.pose.left, move.pose.right)), body: bodyFor(move.pose) } : null;
+      dance.update(t, [perfect, { ...armAngles(poseWithArms(0, 0)), body: still }]);
     }
     const [p1, p2] = dance.dancers;
     expect(dance.finished).toBe(true);

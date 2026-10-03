@@ -8,12 +8,13 @@ import {
   armAngles,
   BEAT_MS,
   danceAccuracy,
+  DanceBodyTracker,
   DanceEngine,
   danceHint,
   DANCE_CONFIG,
   DANCE_POSES,
   generateChoreography,
-  type ArmAngles,
+  type DanceInput,
   type DancerState,
 } from '../../features/dance/dance';
 import { DanceMusic } from '../../features/dance/music';
@@ -139,6 +140,9 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
   // Two dancers: each needs a spot in their half with room to stretch the arms out.
   const [guides] = useState(() => (players === 2 ? [new StandGuide(0, STAND_ROOM_SW.dance), new StandGuide(1, STAND_ROOM_SW.dance)] : []));
   const standZones = useCallback(() => (stageRef.current === 'waiting' ? guides.map((g) => g.zone) : []), [guides]);
+  // Squats, jumps and steps are measured against where each dancer stands.
+  const [bodies] = useState(() => Array.from({ length: players }, () => new DanceBodyTracker()));
+  const lastFrameAt = useRef<number | null>(null);
 
   useEffect(() => {
     engine.setExpected(null);
@@ -155,8 +159,9 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
 
   useEngineFrame(engine, (frame) => {
     const poses = assignPlayers(frame, players);
-    const angles: (ArmAngles | null)[] = poses.map((p) => (p ? armAngles(p) : null));
     const now = frame.time;
+    const dt = lastFrameAt.current === null ? 0 : Math.min(200, now - lastFrameAt.current);
+    lastFrameAt.current = now;
     let songTime = -1;
 
     if (stageRef.current === 'waiting') {
@@ -178,7 +183,15 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
     if (stageRef.current === 'playing') {
       music.update();
       songTime = music.time;
-      for (const j of dance.update(songTime, angles)) rendererRef.current?.judged(j.player, j.grade, j.points, now);
+    }
+    // Where each dancer's body is against their standing spot; the spot holds still while a body move is coming.
+    const upcoming = dance.current;
+    const hold = songTime >= 0 && !!upcoming?.pose.body && songTime >= upcoming.at - DANCE_CONFIG.leadMs * 0.6;
+    const offsets = poses.map((p, i) => bodies[i]?.update(p, dt, hold) ?? null);
+    const inputs: (DanceInput | null)[] = poses.map((p, i) => (p ? { ...armAngles(p), body: offsets[i] } : null));
+
+    if (stageRef.current === 'playing') {
+      for (const j of dance.update(songTime, inputs)) rendererRef.current?.judged(j.player, j.grade, j.points, now);
       if (songTime > dance.duration) {
         stageRef.current = 'done';
         music.stop();
@@ -202,7 +215,7 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
       songTime,
       dance.moves,
       current,
-      poses.map((p, i) => ({ pose: players === 1 ? (frame.trackable ? frame.displayPose : null) : p, combo: dance.dancers[i]?.combo ?? 0 })),
+      poses.map((p, i) => ({ pose: players === 1 ? (frame.trackable ? frame.displayPose : null) : p, combo: dance.dancers[i]?.combo ?? 0, offset: offsets[i] })),
       now,
     );
     if (progressRef.current) progressRef.current.style.transform = `scaleX(${clamp(songTime / dance.duration, 0, 1)})`;
@@ -216,8 +229,8 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
       scores: dance.dancers.map((d) => d.score),
       combos: dance.dancers.map((d) => d.combo),
       multipliers: dance.dancers.map((_, i) => dance.multiplier(i)),
-      // Error mode on the dance floor: which arm to move, and which way.
-      hints: angles.map((a) => (current && songTime >= current.at - DANCE_CONFIG.leadMs * 0.6 ? danceHint(a, current.pose) : '')),
+      // Error mode on the dance floor: what the body still has to do, which arm to move and which way.
+      hints: inputs.map((a) => (current && songTime >= current.at - DANCE_CONFIG.leadMs * 0.6 ? danceHint(a, current.pose) : '')),
       countdown: stageRef.current === 'playing' && introBeat >= 4 && introBeat < 8 ? 8 - introBeat : null,
       currentId: current?.id ?? null,
     };
@@ -300,7 +313,7 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
                   )}
                 </div>
               )}
-              <p className="overlay__message">Повторяй позу с карточки, когда она доедет до розовой рамки. Руки — главное.</p>
+              <p className="overlay__message">Повторяй движение с карточки, когда она доедет до розовой рамки: позы рук, приседы, прыжки и шаги в сторону.</p>
             </motion.div>
           )}
           {hud.countdown !== null && (
@@ -374,8 +387,8 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
         {stage !== 'done' && <NextPoses dance={dance} currentId={hud.currentId} />}
         <p className="dance__tip">
           {players === 2
-            ? 'Игрок 1 — слева, игрок 2 — справа, оба видны по пояс. В подсвеченной зоне хватает места развести руки в стороны; если игра просит отойти — шагните назад.'
-            : 'Танцуй руками: вверх, в стороны, по диагонали. Ноги двигай как хочешь — это танцпол!'}
+            ? 'Игрок 1 — слева, игрок 2 — справа, оба видны хотя бы по пояс. В подсвеченной зоне хватает места развести руки и шагнуть в сторону; если игра просит отойти — шагните назад.'
+            : 'Танцуй всем телом: позы рук, приседы, прыжки и шаги в сторону. Пунктирная фигура показывает, куда двигаться.'}
         </p>
       </aside>
     </main>
