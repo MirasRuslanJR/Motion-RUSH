@@ -7,7 +7,8 @@ import { NicknameField } from '../../components/NicknameField';
 import type { MotionEngine } from '../../features/engine/MotionEngine';
 import type { SessionResult } from '../../features/gameplay/types';
 import { motionMeta, type ControlScheme } from '../../features/gestures/types';
-import type { GameModeDef } from '../../features/modes/modes';
+import { difficultyOf } from '../../features/modes/difficulty';
+import { supportsDifficulty, type GameModeDef } from '../../features/modes/modes';
 import type { DuelRoom } from '../../features/online/DuelRoom';
 import { submitScore } from '../../features/online/globalLeaderboard';
 import { computeSessionStats, type MoveStats } from '../../features/results/sessionStats';
@@ -173,7 +174,9 @@ export function ResultsScreen({ engine, result, mode, recorded, profile, duel, o
     { label: 'Бонусы собраны', value: `${result.orbsCollected} из ${result.orbsTotal}` },
   ];
 
-  const headline = result.outcome === 'complete' ? 'трасса пройдена' : mode.energy === 1 ? 'игра окончена' : 'энергия закончилась';
+  // With the difficulty a run may start with one life even in a five-life mode.
+  const headline = result.outcome === 'complete' ? 'трасса пройдена' : (result.lives ?? mode.energy) === 1 ? 'игра окончена' : 'энергия закончилась';
+  const level = result.difficulty && supportsDifficulty(mode) ? difficultyOf(result.difficulty).title : null;
   // A human sentence first — numbers come after.
   const verdict =
     accuracy >= 90
@@ -189,7 +192,8 @@ export function ResultsScreen({ engine, result, mode, recorded, profile, duel, o
       <header className="results__hero">
         <div className="results__headline">
           <p className="t-label">
-            {mode.title} · {headline}
+            {mode.title}
+            {level && ` · ${level}`} · {headline}
           </p>
           <motion.div
             className="results__score"

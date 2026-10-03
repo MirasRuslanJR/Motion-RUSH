@@ -383,11 +383,11 @@ export function seedForMode(mode: GameModeDef, sharedSeed?: number): number {
 
 /**
  * Difficulty applies where it makes sense: not to Practice (slow by design), not to
- * the online duel (both players race the same course) and not to Reaction and Squat 30
- * (fixed tests where the time or the count is the result).
+ * the Daily Challenge and the online duel (the same course for everyone) and not to
+ * Reaction and Squat 30 (fixed tests where the time or the count is the result).
  */
 export function supportsDifficulty(mode: GameModeDef): boolean {
-  if (mode.practice || mode.online) return false;
+  if (mode.practice || mode.online || mode.seed === 'daily') return false;
   return mode.kind !== 'arcade' || mode.arcade === 'stars' || mode.arcade === 'freeze';
 }
 
@@ -423,5 +423,6 @@ export function rulesForMode(mode: GameModeDef, scheme: ControlScheme, difficult
     practice: mode.practice,
     timing: mode.timing || d.window > 1 ? timingAt(widestTiming(mode.timing), d) : undefined,
     scoreScale: d.score,
+    difficulty: d.id,
   };
 }

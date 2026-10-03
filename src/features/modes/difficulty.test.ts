@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { GAME_CONFIG } from '../../config/game.config';
+import { COURSES, GAME_CONFIG } from '../../config/game.config';
 import { FreezeGame } from '../arcade/freeze';
 import { StarCatch } from '../arcade/starCatch';
+import { generateCourse } from '../gameplay/course';
 import { GameEngine, type PlayerInput } from '../gameplay/GameEngine';
 import { isPickup, type Lane } from '../gameplay/types';
-import { arcadeTune, difficultyOf, DIFFICULTIES } from './difficulty';
+import { arcadeTune, difficultyOf, DIFFICULTIES, scaleCourse } from './difficulty';
 import { courseForMode, effectiveDifficulty, getMode, GAME_MODES, rulesForMode, supportsDifficulty } from './modes';
 
 const idle: PlayerInput = { trackable: true, lane: 0, jumpHeld: false, crouchHeld: false, diagnosis: null, hint: null };
@@ -18,8 +19,9 @@ function perfect(g: GameEngine): PlayerInput {
   return { ...idle, lane, jumpHeld, crouchHeld: expected === 'CROUCH' };
 }
 
-function required(mode: string, level: Parameters<typeof difficultyOf>[0]) {
-  return courseForMode(getMode(mode), 7, level).filter((c) => !isPickup(c.kind));
+/** The standard course from one seed at a level (Classic Run's course). */
+function required(level: Parameters<typeof difficultyOf>[0]) {
+  return generateCourse(7, scaleCourse(COURSES.standard, difficultyOf(level))).filter((c) => !isPickup(c.kind));
 }
 
 describe('difficulty levels', () => {
@@ -32,14 +34,14 @@ describe('difficulty levels', () => {
   });
 
   it('a harder runner course has more obstacles that come faster', () => {
-    const easy = required('daily', 'easy');
-    const normal = required('daily', 'normal');
-    const expert = required('daily', 'expert');
+    const easy = required('easy');
+    const normal = required('normal');
+    const expert = required('expert');
     expect(easy.length).toBeLessThan(normal.length);
     expect(expert.length).toBeGreaterThan(normal.length);
     expect(Math.max(...expert.map((c) => c.leadMs))).toBeLessThan(Math.max(...normal.map((c) => c.leadMs)));
-    // The same seed at Normal is exactly the course the mode always had.
-    expect(courseForMode(getMode('daily'), 7, 'normal')).toEqual(courseForMode(getMode('daily'), 7));
+    // Normal is exactly the course the mode always had.
+    expect(generateCourse(7, scaleCourse(COURSES.standard, difficultyOf('normal')))).toEqual(generateCourse(7, COURSES.standard));
   });
 
   it('lives: more on Easy, fewer on Expert, never zero — and Hardcore stays at one life', () => {
@@ -64,9 +66,8 @@ describe('difficulty levels', () => {
 
   it('points scale with the level', () => {
     const scores = (['easy', 'normal', 'expert'] as const).map((level) => {
-      // The daily course is the same for every level here; only the point value differs.
-      const mode = getMode('daily');
-      const game = new GameEngine(courseForMode(mode, undefined, 'normal'), undefined, { ...rulesForMode(mode, 'body', level), timing: undefined });
+      // The same course for every level here; only the point value differs.
+      const game = new GameEngine(generateCourse(3), undefined, { ...rulesForMode(getMode('classic'), 'body', level), timing: undefined });
       for (let t = 0; t < 200_000 && game.phase !== 'ended'; t += 16) game.update(16, perfect(game));
       return game.score;
     });
@@ -76,9 +77,10 @@ describe('difficulty levels', () => {
 
   it('applies to the modes where it makes sense', () => {
     const off = GAME_MODES.filter((m) => !supportsDifficulty(m)).map((m) => m.id);
-    expect(off.sort()).toEqual(['duel', 'practice', 'reaction', 'squats']);
-    // Practice and the online duel always play the standard course.
+    expect(off.sort()).toEqual(['daily', 'duel', 'practice', 'reaction', 'squats']);
+    // Practice, the daily course and the online duel always play the standard course.
     expect(effectiveDifficulty(getMode('practice'), 'expert').id).toBe('normal');
+    expect(courseForMode(getMode('daily'), undefined, 'expert')).toEqual(courseForMode(getMode('daily')));
     expect(courseForMode(getMode('duel'), 5, 'expert')).toEqual(courseForMode(getMode('duel'), 5));
   });
 

@@ -69,6 +69,7 @@ const STATS = [
 function fixedLevelNote(mode: GameModeDef): string {
   if (mode.practice) return 'Тренировка всегда медленная и без штрафов';
   if (mode.online) return 'В дуэли у обоих одна и та же трасса';
+  if (mode.seed === 'daily') return 'Трасса дня одна для всех — сложность у всех обычная';
   return 'Здесь результат — твоё время и счёт, сложность не меняется';
 }
 

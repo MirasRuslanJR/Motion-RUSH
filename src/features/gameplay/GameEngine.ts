@@ -2,6 +2,7 @@ import { GAME_CONFIG } from '../../config/game.config';
 import type { Verdict } from '../gestures/diagnosisRules';
 import { isErrorVerdict } from '../gestures/ErrorDiagnosisEngine';
 import { motionMeta, type ControlScheme, type ExpectedMotion } from '../gestures/types';
+import type { Difficulty } from '../modes/difficulty';
 import { courseDuration, generateCourse } from './course';
 import {
   isPickup,
@@ -65,6 +66,8 @@ export interface GameRules {
   timing?: { airtimeMs?: number; clearGraceMs?: number; duckGraceMs?: number };
   /** Every point is worth this much (harder difficulty = more points). */
   scoreScale?: number;
+  /** The difficulty the run is played at (shown on the results). */
+  difficulty?: Difficulty;
 }
 
 const DEFAULT_RULES: GameRules = { mode: 'classic', scheme: 'seated', energy: GAME_CONFIG.energy, practice: false };
@@ -519,6 +522,8 @@ export class GameEngine {
       orbsCollected: this.orbsCollected,
       orbsTotal: this.course.filter((c) => isPickup(c.kind)).length,
       timeline: [...this.timeline],
+      difficulty: this.rules.difficulty,
+      lives: this.rules.energy,
     };
   }
 }

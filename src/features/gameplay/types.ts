@@ -1,4 +1,5 @@
 import type { ControlScheme, ExpectedMotion } from '../gestures/types';
+import type { Difficulty } from '../modes/difficulty';
 
 /** -1 = left lane, 0 = centre, 1 = right lane. */
 export type Lane = -1 | 0 | 1;
@@ -94,4 +95,7 @@ export interface SessionResult {
   orbsTotal: number;
   /** Score sampled once per second of game time. */
   timeline: { t: number; score: number }[];
+  /** The difficulty the run was played at and the lives it started with. */
+  difficulty?: Difficulty;
+  lives?: number;
 }
