@@ -290,6 +290,18 @@
   background: rgba(255, 193, 77, 0.12);
 }
 
+.hud__power--magnet {
+  color: #ff8fd8;
+  border: 1px solid rgba(255, 90, 209, 0.6);
+  background: rgba(255, 90, 209, 0.12);
+}
+
+.hud__power--slow {
+  color: #c9bcff;
+  border: 1px solid rgba(155, 133, 255, 0.6);
+  background: rgba(155, 133, 255, 0.14);
+}
+
 .duel-panel {
   position: absolute;
   top: 64px;

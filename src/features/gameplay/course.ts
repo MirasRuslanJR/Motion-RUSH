@@ -1,5 +1,5 @@
 import { GAME_CONFIG, type CourseConfig, type CoursePhase } from '../../config/game.config';
-import { isPickup, OBSTACLE_REQUIREMENT, type CourseItem, type Lane, type ObstacleKind, type PickupKind } from './types';
+import { isPickup, OBSTACLE_REQUIREMENT, POWER_UPS, type CourseItem, type Lane, type ObstacleKind, type PickupKind, type PowerUpKind } from './types';
 
 /** mulberry32 — tiny deterministic PRNG. Same seed → same course. */
 export function createRng(seed: number): () => number {
@@ -11,6 +11,18 @@ export function createRng(seed: number): () => number {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/** A power-up by the configured weights (r in 0..1). */
+export function pickPowerUp(r: number): PowerUpKind {
+  const weights = GAME_CONFIG.powerUps.weights;
+  const total = POWER_UPS.reduce((sum, kind) => sum + weights[kind], 0);
+  let left = r * total;
+  for (const kind of POWER_UPS) {
+    left -= weights[kind];
+    if (left < 0) return kind;
+  }
+  return POWER_UPS[POWER_UPS.length - 1] ?? 'SHIELD';
 }
 
 function openLane(kind: ObstacleKind): Lane {
@@ -81,7 +93,7 @@ export function generateCourse(seed: number = GAME_CONFIG.seed, cfg: CourseConfi
       const lanes: Lane[] = [-1, 0, 1];
       const lane = lanes[Math.floor(rng() * lanes.length)] ?? 0;
       const power = rng() < GAME_CONFIG.powerUps.chance;
-      const pickup: PickupKind = power ? (rng() < 0.5 ? 'SHIELD' : 'BOOST') : 'ORB';
+      const pickup: PickupKind = power ? pickPowerUp(rng()) : 'ORB';
       items.push({ id: id++, kind: pickup, arriveAt: time + gap / 2, leadMs: phase.leadMs, lane });
     }
 

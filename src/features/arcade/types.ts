@@ -28,7 +28,7 @@ export interface ArcadeInput {
   hint: string | null;
 }
 
-export type Tone = 'go' | 'stop' | 'info' | 'good' | 'bad';
+export type Tone = 'go' | 'stop' | 'warn' | 'info' | 'good' | 'bad';
 
 /** Low-frequency state for the screen (changes a few times a second). */
 export interface ArcadeHud {
@@ -47,6 +47,10 @@ export interface ArcadeHud {
   toast: { id: number; text: string; tone: Tone } | null;
   /** Live gauge 0..1 (e.g. how still the player is) with an optional limit mark; null = hidden. */
   meter: { value: number; mark: number | null; label: string; danger: boolean } | null;
+  /** Freeze!: the figure called for the red light (arm angles as on the dance floor). */
+  figure?: { name: string; left: number; right: number; state: 'soon' | 'now' | 'hit' } | null;
+  /** A race to the finish: a runner rides the progress bar. */
+  runner?: boolean;
 }
 
 export interface ArcadeResult {

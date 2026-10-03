@@ -12,6 +12,7 @@ import {
   type Lane,
   type MissReason,
   type ObstacleRecord,
+  type PowerUpKind,
   type SessionResult,
 } from './types';
 
@@ -41,7 +42,8 @@ export type GameEvent =
   | { type: 'clear'; item: CourseItem; quality: ClearQuality; points: number; combo: number; multiplier: number }
   | { type: 'miss'; item: CourseItem; reason: MissReason }
   | { type: 'orb'; item: CourseItem; points: number }
-  | { type: 'powerup'; item: CourseItem; kind: 'SHIELD' | 'BOOST' }
+  /** A power-up was picked up; a heart with full energy is worth `points` instead of a life. */
+  | { type: 'powerup'; item: CourseItem; kind: PowerUpKind; points?: number }
   | { type: 'shield-used'; item: CourseItem }
   | { type: 'combo'; combo: number; multiplier: number }
   | { type: 'jump' }
@@ -140,6 +142,10 @@ export class GameEngine {
   shield = false;
   /** Double points until this game time. */
   boostUntil = Number.NEGATIVE_INFINITY;
+  /** Every energy orb flies to the runner until this game time. */
+  magnetUntil = Number.NEGATIVE_INFINITY;
+  /** Slow motion until this game time. */
+  slowUntil = Number.NEGATIVE_INFINITY;
   /** How long one jump keeps the runner in the air. */
   readonly airtimeMs: number;
   private readonly clearGraceMs: number;
@@ -161,6 +167,19 @@ export class GameEngine {
 
   get boosted(): boolean {
     return this.time < this.boostUntil;
+  }
+
+  get magnetized(): boolean {
+    return this.time < this.magnetUntil;
+  }
+
+  get slowed(): boolean {
+    return this.time < this.slowUntil;
+  }
+
+  /** Game time per real millisecond: below 1 in slow motion, so obstacles come slower. */
+  get timeScale(): number {
+    return this.slowed ? this.cfg.powerUps.slowScale : 1;
   }
 
   get multiplier(): number {
@@ -285,7 +304,7 @@ export class GameEngine {
   }
 
   private step(dtMs: number, input: PlayerInput, events: GameEvent[]): void {
-    this.time += dtMs;
+    this.time += dtMs * this.timeScale;
     const t = this.time;
 
     // Player state (edges count as detected gestures).
@@ -322,17 +341,41 @@ export class GameEngine {
     while (this.orbs.length > 0) {
       const orb = this.orbs[0];
       if (!orb || t < orb.arriveAt - w) break;
-      if (this.lane === orb.lane) {
-        if (orb.kind === 'SHIELD') {
-          this.shield = true;
-          events.push({ type: 'powerup', item: orb, kind: 'SHIELD' });
-        } else if (orb.kind === 'BOOST') {
-          this.boostUntil = t + this.cfg.powerUps.boostMs;
-          events.push({ type: 'powerup', item: orb, kind: 'BOOST' });
-        } else {
-          const points = this.cfg.scoring.orb * this.multiplier;
-          this.score += points;
-          events.push({ type: 'orb', item: orb, points });
+      // A magnet collects every energy orb, whatever the lane; power-ups still need the lane.
+      if (this.lane === orb.lane || (orb.kind === 'ORB' && this.magnetized)) {
+        const pu = this.cfg.powerUps;
+        switch (orb.kind) {
+          case 'SHIELD':
+            this.shield = true;
+            events.push({ type: 'powerup', item: orb, kind: 'SHIELD' });
+            break;
+          case 'BOOST':
+            this.boostUntil = t + pu.boostMs;
+            events.push({ type: 'powerup', item: orb, kind: 'BOOST' });
+            break;
+          case 'MAGNET':
+            this.magnetUntil = t + pu.magnetMs;
+            events.push({ type: 'powerup', item: orb, kind: 'MAGNET' });
+            break;
+          case 'SLOWMO':
+            this.slowUntil = t + pu.slowMs;
+            events.push({ type: 'powerup', item: orb, kind: 'SLOWMO' });
+            break;
+          case 'HEART':
+            if (this.energy < this.rules.energy) {
+              this.energy++;
+              events.push({ type: 'powerup', item: orb, kind: 'HEART' });
+            } else {
+              const points = pu.heartPoints * this.multiplier;
+              this.score += points;
+              events.push({ type: 'powerup', item: orb, kind: 'HEART', points });
+            }
+            break;
+          default: {
+            const points = this.cfg.scoring.orb * this.multiplier;
+            this.score += points;
+            events.push({ type: 'orb', item: orb, points });
+          }
         }
         this.orbsCollected++;
         this.orbs.shift();

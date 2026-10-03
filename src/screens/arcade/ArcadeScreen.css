@@ -167,6 +167,99 @@
   --tone: var(--cyan);
 }
 
+.arcade [data-tone='warn'] {
+  --tone: var(--warn);
+}
+
+/* Freeze!: a runner rides the progress bar to the finish flag. */
+.arcade__progress.has-runner {
+  position: relative;
+  height: 6px;
+  margin: 26px 30px 0 6px;
+  overflow: visible;
+}
+
+.arcade__runner {
+  position: absolute;
+  bottom: 4px;
+  translate: -50% 0;
+  color: var(--success);
+  transition: left 0.2s linear;
+}
+
+.arcade__flag {
+  position: absolute;
+  right: -22px;
+  bottom: -2px;
+  width: 16px;
+  height: 14px;
+  border-radius: 2px;
+  background: repeating-conic-gradient(var(--text) 0 25%, #0c0d16 0 50%) 0 0 / 7px 7px;
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+/* Freeze!: the called figure, in the bottom corner (the big cue stays readable above). */
+.arcade__figure {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  z-index: 6;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 164px;
+  padding: 10px 14px 14px;
+  border-radius: var(--radius-m);
+  background: rgba(8, 9, 16, 0.86);
+  border: 2px solid var(--error);
+  color: var(--text);
+}
+
+.arcade__figure strong {
+  max-width: 180px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.arcade__figure-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.arcade__figure[data-state='soon'] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.arcade__figure[data-state='hit'] {
+  border-color: var(--success);
+  color: var(--success);
+  box-shadow:
+    0 0 0 4px var(--success-soft),
+    0 0 32px rgba(94, 232, 168, 0.45);
+}
+
+@media (max-width: 800px) {
+  .arcade__figure {
+    bottom: 10px;
+    right: 10px;
+    min-width: 104px;
+    padding: 8px 10px 10px;
+  }
+  .arcade__figure svg {
+    width: 64px;
+    height: 64px;
+  }
+  .arcade__figure strong {
+    font-size: 14px;
+  }
+}
+
 .arcade__bottom {
   display: grid;
   justify-items: center;

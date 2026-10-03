@@ -5,7 +5,7 @@ import { computeSessionStats } from '../results/sessionStats';
 import { getMode, courseForMode, rulesForMode, timingForRecognition } from '../modes/modes';
 import { dailySeed, generateCourse } from './course';
 import { GameEngine, type GameEvent, type PlayerInput } from './GameEngine';
-import { isPickup, type CourseItem, type Lane } from './types';
+import { isPickup, POWER_UPS, type CourseItem, type Lane } from './types';
 
 const DT = 16;
 const idle: PlayerInput = {
@@ -87,9 +87,10 @@ describe('game engine', () => {
     const result = game.result();
     expect(result.outcome).toBe('out-of-energy');
     const misses = result.obstacles.filter((o) => o.result === 'miss');
-    // A shield picked up in the middle lane absorbs one miss each.
+    // A shield picked up in the middle lane absorbs one miss each; a heart gives a life back.
     const absorbed = events.filter((e) => e.type === 'shield-used').length;
-    expect(misses.length - absorbed).toBe(GAME_CONFIG.energy);
+    const healed = events.filter((e) => e.type === 'powerup' && e.kind === 'HEART' && !e.points).length;
+    expect(misses.length - absorbed - healed).toBe(GAME_CONFIG.energy);
     expect(misses[0]?.missReason?.ruleId).toBe('NO_ATTEMPT');
     expect(misses[0]?.missReason?.message).toMatch(/^Движения не было — \S/);
   });
@@ -194,6 +195,53 @@ describe('game modes and power-ups', () => {
     const events = play(game, (g) => perfectInput(g.expected, g));
     const clear = events.find((e) => e.type === 'clear');
     expect(clear?.type === 'clear' && clear.multiplier).toBe(GAME_CONFIG.powerUps.boostMultiplier);
+  });
+
+  it('a magnet pulls in energy orbs from every lane while it lasts', () => {
+    const game = new GameEngine([
+      item(0, 'MAGNET', 1000),
+      item(1, 'ORB', 2000, -1),
+      item(2, 'ORB', 3000, 1),
+      item(3, 'ORB', 12000, -1),
+      item(4, 'HURDLE', 13000),
+    ]);
+    const events = play(game, (g) => perfectInput(g.expected, g));
+    expect(events.filter((e) => e.type === 'powerup' && e.kind === 'MAGNET')).toHaveLength(1);
+    // The runner never leaves the middle lane: the side orbs come anyway — until the magnet runs out.
+    expect(events.filter((e) => e.type === 'orb')).toHaveLength(2);
+  });
+
+  it('slow motion slows game time down for a while', () => {
+    const game = new GameEngine([item(0, 'SLOWMO', 1000), item(1, 'HURDLE', 9000)]);
+    play(game, () => idle, GAME_CONFIG.countdownStepMs * 3 + 1200);
+    expect(game.slowed).toBe(true);
+    const before = game.time;
+    for (let i = 0; i < 10; i++) game.update(100, idle);
+    expect(game.time - before).toBeCloseTo(1000 * GAME_CONFIG.powerUps.slowScale, 0);
+    // …and normal speed comes back.
+    play(game, () => idle, 10_000);
+    expect(game.slowed).toBe(false);
+    expect(game.timeScale).toBe(1);
+  });
+
+  it('a heart gives a life back, or points when energy is full', () => {
+    const full = new GameEngine([item(0, 'HEART', 1000), item(1, 'HURDLE', 3000)]);
+    const fullEvents = play(full, (g) => perfectInput(g.expected, g));
+    const bonus = fullEvents.find((e) => e.type === 'powerup');
+    expect(bonus?.type === 'powerup' && bonus.points).toBe(GAME_CONFIG.powerUps.heartPoints);
+    expect(full.energy).toBe(GAME_CONFIG.energy);
+
+    const hurt = new GameEngine([item(0, 'HURDLE', 1000), item(1, 'HEART', 3000), item(2, 'HURDLE', 6000)]);
+    // Misses the first hurdle, picks up the heart, clears the last one.
+    play(hurt, (g) => (g.activeItem?.id === 0 ? idle : perfectInput(g.expected, g)));
+    expect(hurt.result().obstacles[0]?.result).toBe('miss');
+    expect(hurt.energy).toBe(GAME_CONFIG.energy);
+  });
+
+  it('courses bring every kind of power-up', () => {
+    const kinds = new Set<string>();
+    for (let seed = 1; seed <= 12; seed++) for (const c of generateCourse(seed)) kinds.add(c.kind);
+    for (const kind of POWER_UPS) expect(kinds.has(kind)).toBe(true);
   });
 
   it('practice never costs energy and hardcore ends on the first miss', () => {

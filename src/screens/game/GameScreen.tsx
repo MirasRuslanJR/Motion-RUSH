@@ -37,6 +37,8 @@ interface HudState {
   energy: number;
   shield: boolean;
   boosted: boolean;
+  magnet: boolean;
+  slowed: boolean;
   phase: GameEngine['phase'];
   countdown: number | null;
   nextId: number | null;
@@ -68,6 +70,8 @@ function snapshot(game: GameEngine, mode: GameModeDef, outcome: GameOutcome | nu
     energy: game.energy,
     shield: game.shield,
     boosted: game.boosted,
+    magnet: game.magnetized,
+    slowed: game.slowed,
     phase: game.phase,
     countdown: game.countdownValue,
     nextId: next?.id ?? null,
@@ -419,6 +423,8 @@ export function GameScreen({ engine, mode, sharedSeed = null, duel = null, onFin
               <div className="hud__powers">
                 {hud.shield && <span className="hud__power hud__power--shield">ЩИТ</span>}
                 {hud.boosted && <span className="hud__power hud__power--boost">ОЧКИ ×2</span>}
+                {hud.magnet && <span className="hud__power hud__power--magnet">МАГНИТ</span>}
+                {hud.slowed && <span className="hud__power hud__power--slow">ЗАМЕДЛЕНИЕ</span>}
               </div>
             </div>
           </div>

@@ -46,12 +46,22 @@ export const GAME_CONFIG = {
     maxMultiplier: 4,
   },
 
-  /** Power-ups: a shield absorbs one miss, a boost doubles points for a while. */
+  /** Power-ups: shield, boost, magnet, slow motion and a heart. */
   powerUps: {
     /** Share of pickups that are power-ups instead of plain orbs. */
-    chance: 0.18,
+    chance: 0.34,
+    /** How often each power-up comes up, relative to the others. */
+    weights: { SHIELD: 1, BOOST: 1, MAGNET: 1, SLOWMO: 1, HEART: 0.7 },
+    /** A boost doubles the points for a while. */
     boostMs: 8000,
     boostMultiplier: 2,
+    /** A magnet pulls every energy orb into the runner, whatever the lane. */
+    magnetMs: 8000,
+    /** Slow motion: game time runs at this speed for slowMs of game time (≈ 8 s of real time). */
+    slowScale: 0.6,
+    slowMs: 5000,
+    /** A heart gives a life back; with full energy it is worth points instead. */
+    heartPoints: 100,
   },
 
   course: {

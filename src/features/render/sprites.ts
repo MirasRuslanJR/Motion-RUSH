@@ -1,13 +1,16 @@
 import backdropUrl from '../../assets/game/backdrop.svg';
 import boostUrl from '../../assets/game/boost.svg';
+import heartUrl from '../../assets/game/heart.svg';
 import hurdleUrl from '../../assets/game/hurdle.svg';
+import magnetUrl from '../../assets/game/magnet.svg';
 import orbUrl from '../../assets/game/orb.svg';
 import pylonUrl from '../../assets/game/pylon.svg';
 import shieldUrl from '../../assets/game/shield.svg';
+import slowmoUrl from '../../assets/game/slowmo.svg';
 import wallUrl from '../../assets/game/wall.svg';
 
 /** Sprites of the runner scene; each one is an SVG in src/assets/game. */
-export type SpriteName = 'wall' | 'hurdle' | 'pylon' | 'orb' | 'shield' | 'boost';
+export type SpriteName = 'wall' | 'hurdle' | 'pylon' | 'orb' | 'shield' | 'boost' | 'magnet' | 'slowmo' | 'heart';
 
 interface SpriteSource {
   url: string;
@@ -23,6 +26,9 @@ const SPRITES: Record<SpriteName, SpriteSource> = {
   orb: { url: orbUrl, width: 128, height: 128 },
   shield: { url: shieldUrl, width: 128, height: 128 },
   boost: { url: boostUrl, width: 128, height: 128 },
+  magnet: { url: magnetUrl, width: 128, height: 128 },
+  slowmo: { url: slowmoUrl, width: 128, height: 128 },
+  heart: { url: heartUrl, width: 128, height: 128 },
 };
 
 /** Horizon art: its bottom edge is the horizon line, the sky above it stays transparent. */

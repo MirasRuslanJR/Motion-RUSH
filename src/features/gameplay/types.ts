@@ -9,12 +9,29 @@ export type Lane = -1 | 0 | 1;
  * BEAM   — overhead laser across all lanes (duck under)
  * ORB    — optional bonus pickup in a lane
  */
-export type PickupKind = 'ORB' | 'SHIELD' | 'BOOST';
+/**
+ * Power-ups in a lane: SHIELD absorbs one miss, BOOST doubles points, MAGNET pulls
+ * every energy orb in, SLOWMO slows time down, HEART gives a life back.
+ */
+export type PowerUpKind = 'SHIELD' | 'BOOST' | 'MAGNET' | 'SLOWMO' | 'HEART';
+export type PickupKind = 'ORB' | PowerUpKind;
 export type ObstacleKind = 'GATE_LEFT' | 'GATE_RIGHT' | 'GATE_CENTER' | 'HURDLE' | 'BEAM' | PickupKind;
 
-/** Optional pickups in a lane: ORB = points, SHIELD = absorbs one miss, BOOST = double points. */
+export const POWER_UPS: readonly PowerUpKind[] = ['SHIELD', 'BOOST', 'MAGNET', 'SLOWMO', 'HEART'];
+
+/** Optional pickups in a lane: ORB = points, the rest are power-ups. */
 export function isPickup(kind: ObstacleKind): kind is PickupKind {
-  return kind === 'ORB' || kind === 'SHIELD' || kind === 'BOOST';
+  switch (kind) {
+    case 'ORB':
+    case 'SHIELD':
+    case 'BOOST':
+    case 'MAGNET':
+    case 'SLOWMO':
+    case 'HEART':
+      return true;
+    default:
+      return false;
+  }
 }
 
 export const OBSTACLE_REQUIREMENT: Record<Exclude<ObstacleKind, PickupKind>, ExpectedMotion> = {

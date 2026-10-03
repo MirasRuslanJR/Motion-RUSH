@@ -176,7 +176,7 @@ const ALL_MODES: readonly GameModeDef[] = [
     arcade: 'freeze',
     title: 'Freeze!',
     badge: 'ЗАМРИ',
-    tagline: 'Зелёный — беги на месте, красный — замри. Камера заметит любое движение',
+    tagline: '«Море волнуется»: на зелёный беги, на красный замри в загаданной фигуре',
     accent: '#3dffb0',
     goal: 'Добеги до финиша',
     facts: '100 м · 3 жизни',

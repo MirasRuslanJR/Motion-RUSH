@@ -138,6 +138,30 @@ function running(step: number): Pose {
   return pose;
 }
 
+/** Standing still with the arms at the given angles (0 down, 90 out, 180 up), as the dance floor measures them. */
+function figurePose(left: number, right: number): Pose {
+  const pose = standing();
+  const arm = (shoulder: number, elbow: number, wrist: number, deg: number, out: -1 | 1) => {
+    const s = pose[shoulder];
+    if (!s) return;
+    const r = (deg * Math.PI) / 180;
+    for (const [i, k] of [
+      [elbow, 0.7],
+      [wrist, 1.45],
+    ] as const) {
+      const p = pose[i];
+      if (p) {
+        p.x = s.x + out * Math.sin(r) * SW * k;
+        p.y = s.y + Math.cos(r) * SW * k;
+        p.v = 0.99;
+      }
+    }
+  };
+  arm(LM.LEFT_SHOULDER, LM.LEFT_ELBOW, LM.LEFT_WRIST, left, -1);
+  arm(LM.RIGHT_SHOULDER, LM.RIGHT_ELBOW, LM.RIGHT_WRIST, right, 1);
+  return pose;
+}
+
 /** Waving: only the arms move. */
 function waving(step: number): Pose {
   const pose = standing();
@@ -166,6 +190,10 @@ describe('Freeze!', () => {
     while (game.light !== 'green') tick(standing());
     while (game.light === 'green') tick(running(step++));
     expect(game.distance).toBeGreaterThan(5);
+    // Yellow warns; the first red is a plain freeze, no figure called.
+    expect(game.light).toBe('yellow');
+    expect(game.figure).toBeNull();
+    while (game.light !== 'red') tick(standing());
     const before = game.distance;
 
     // A red light: standing still.
@@ -181,6 +209,48 @@ describe('Freeze!', () => {
     expect(game.distance).toBeLessThan(before);
     expect(game.lastCatch?.group).toBe('arms');
     expect(game.hud().toast?.text).toContain('руки');
+  });
+
+  /** Plays standing still until a red light that calls a figure; returns that figure. */
+  function toFigureRed(game: FreezeGame) {
+    for (let i = 0; i < 5000 && !(game.light === 'red' && game.figure); i++) game.update(input(standing()), 50);
+    if (!game.figure) throw new Error('no figure called');
+    return game.figure;
+  }
+
+  it('calls a figure after the first red; holding it is a statue — a jump forward and points', () => {
+    const game = new FreezeGame(11);
+    const figure = toFigureRed(game);
+    const before = game.distance;
+    expect(game.hud().figure?.name).toBe(figure.name);
+    while (game.light === 'red') game.update(input(figurePose(figure.pose.left, figure.pose.right)), 50);
+    expect(game.statues).toBe(1);
+    expect(game.bonus).toBe(FREEZE.statuePoints);
+    expect(game.distance).toBeCloseTo(before + FREEZE.statueBonusM);
+    expect(game.hud().toast?.text).toContain(figure.name);
+    expect(game.result().lines[0]).toContain('1 из 1');
+  });
+
+  it('a wrong figure held still survives, but is no statue', () => {
+    const game = new FreezeGame(11);
+    toFigureRed(game);
+    while (game.light === 'red') game.update(input(standing()), 50);
+    expect(game.redsSurvived).toBe(2);
+    expect(game.statues).toBe(0);
+    expect(game.hud().toast?.text).toContain('фигура не та');
+  });
+
+  it('some yellows are a trick and go back to green', () => {
+    const game = new FreezeGame(3);
+    let tricks = 0;
+    let prev = game.light;
+    for (let i = 0; i < 4000; i++) {
+      game.update(input(standing()), 50);
+      if (prev === 'yellow' && game.light === 'green') tricks++;
+      prev = game.light;
+    }
+    expect(tricks).toBeGreaterThan(0);
+    expect(game.caught).toBe(0);
   });
 
   it('reaching 100 m finishes the race', () => {

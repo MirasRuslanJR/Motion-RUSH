@@ -4,6 +4,7 @@ import { CameraViewport } from '../../components/CameraViewport';
 import { HoldGesture } from '../../components/HoldGesture';
 import { Icon } from '../../components/Icon';
 import { ModeIcon } from '../../components/ModeIcon';
+import { PoseGlyph } from '../../components/PoseGlyph';
 import { FREEZE, FreezeGame } from '../../features/arcade/freeze';
 import { ReactionGame } from '../../features/arcade/reaction';
 import { SquatGame } from '../../features/arcade/squats';
@@ -44,9 +45,9 @@ const RULES: Record<ArcadeKind, string[]> = {
     'Красные бомбы не трогай: три бомбы — и раунд окончен',
   ],
   freeze: [
-    'Зелёный — беги на месте: чем выше колени, тем быстрее',
-    'Красный — замри! Камера видит даже взмах руки',
-    'Попался — минус жизнь и 10 метров назад. Финиш — 100 м',
+    'Зелёный — беги на месте: чем выше колени, тем быстрее к финишу (100 м)',
+    '«Море волнуется»: жёлтый называет фигуру, на красный встань в неё и замри. Точная фигура — рывок на 6 м и очки, серия — множитель',
+    'Шевельнулся — минус жизнь и 10 м назад, камера скажет, что двигалось. Бывают обманки: жёлтый снова станет зелёным',
   ],
   reaction: [
     'Встань ровно и жди сигнала — двигаться раньше нельзя',
@@ -261,10 +262,36 @@ export function ArcadeScreen({ engine, mode, profile, onRecord, onAgain, onModes
             </div>
           </div>
           {hud.progress !== null && (
-            <div className="arcade__progress" aria-hidden="true">
+            <div className={hud.runner ? 'arcade__progress has-runner' : 'arcade__progress'} aria-hidden="true">
               <div style={{ transform: `scaleX(${Math.min(1, Math.max(0, hud.progress))})` }} />
+              {hud.runner && (
+                <>
+                  <span className="arcade__runner" style={{ left: `${Math.min(1, Math.max(0, hud.progress)) * 100}%` }}>
+                    <ModeIcon name="run" size={20} />
+                  </span>
+                  <span className="arcade__flag" />
+                </>
+              )}
             </div>
           )}
+
+          <AnimatePresence>
+            {playing && hud.figure && (
+              <motion.div
+                key={`${hud.figure.name}${hud.figure.left}`}
+                className="arcade__figure"
+                data-state={hud.figure.state}
+                initial={{ opacity: 0, x: 24 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <span className="arcade__figure-label">{hud.figure.state === 'soon' ? 'Морская фигура' : hud.figure.state === 'hit' ? 'Точно — замри!' : 'Замри в фигуре'}</span>
+                <PoseGlyph pose={hud.figure} size={96} />
+                <strong>{hud.figure.name}</strong>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="arcade__middle">
             <AnimatePresence mode="popLayout">

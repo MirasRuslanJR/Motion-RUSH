@@ -1,14 +1,23 @@
 import { clamp, lerp, midpoint, type Point } from '../../lib/math/geometry';
 import type { MotionFrame } from '../engine/MotionEngine';
 import type { GameEngine, GameEvent } from '../gameplay/GameEngine';
-import { isPickup, OBSTACLE_REQUIREMENT, type CourseItem } from '../gameplay/types';
+import { isPickup, OBSTACLE_REQUIREMENT, type CourseItem, type PowerUpKind } from '../gameplay/types';
 import { motionMeta, type ExpectedMotion } from '../gestures/types';
 import { createPose, LM, lm, type Pose } from '../tracking/landmarks';
 import { buildSyntheticPose } from '../tracking/syntheticPose';
 import { observeCanvas, type CanvasSize } from './canvas';
 import { PALETTE, rgba } from './palette';
 import { ParticleSystem } from './particles';
-import { BACKDROP, loadImage, preloadSprites, PYLON_LENS_Y, sprite } from './sprites';
+import { BACKDROP, loadImage, preloadSprites, PYLON_LENS_Y, sprite, type SpriteName } from './sprites';
+
+/** How each power-up looks and what it says when picked up. */
+const POWER_LOOK: Record<PowerUpKind, { sprite: SpriteName; text: string; sub: string; color: string }> = {
+  SHIELD: { sprite: 'shield', text: 'ЩИТ', sub: 'защита от промаха', color: PALETTE.success },
+  BOOST: { sprite: 'boost', text: '×2', sub: 'очки на 8 секунд', color: PALETTE.warn },
+  MAGNET: { sprite: 'magnet', text: 'МАГНИТ', sub: 'энергия летит к тебе', color: PALETTE.pink },
+  SLOWMO: { sprite: 'slowmo', text: 'ЗАМЕДЛЕНИЕ', sub: 'время течёт медленнее', color: PALETTE.violet },
+  HEART: { sprite: 'heart', text: '+1 ЖИЗНЬ', sub: 'энергия восстановлена', color: '#ff4f6d' },
+};
 
 const Z_FAR = 12;
 const FOCAL = 1.4;
@@ -104,6 +113,8 @@ export class GameRenderer {
   /** Horizon art (sun, mountains, city), painted on the static background once it loads. */
   private backdrop: HTMLImageElement | null = null;
   private disposed = false;
+  /** A magnet is on: energy orbs fly in from every lane. */
+  private magnet = false;
   private opponent: OpponentGhost | null = null;
   private readonly ghostPose: Pose = createPose();
   private ghostLane = 0;
@@ -206,9 +217,12 @@ export class GameRenderer {
         this.itemFx.set(event.item.id, { status: 'clear', at: now });
         const x = this.laneX(g, event.item.lane, 0);
         const y = this.groundY(g, 0) - g.laneW * 0.5;
-        const color = event.kind === 'SHIELD' ? PALETTE.success : PALETTE.warn;
-        this.particles.burst(x, y, color, 26, g.laneW * 2);
-        this.floaters.push({ text: event.kind === 'SHIELD' ? 'ЩИТ' : '×2', sub: event.kind === 'SHIELD' ? 'защита от промаха' : 'очки на 8 секунд', x, y: y - g.laneW * 0.3, born: now, color });
+        const look = POWER_LOOK[event.kind];
+        this.particles.burst(x, y, look.color, 26, g.laneW * 2);
+        // A heart with full energy is worth points instead of a life.
+        const text = event.points ? `+${event.points}` : look.text;
+        const sub = event.points ? 'жизни и так полные' : look.sub;
+        this.floaters.push({ text, sub, x, y: y - g.laneW * 0.3, born: now, color: look.color });
         break;
       }
       case 'shield-used':
@@ -258,7 +272,9 @@ export class GameRenderer {
       this.ghostDuck = lerp(this.ghostDuck, opp.ducking ? 1 : 0, k(80));
     }
     const lead = game.nextRequired?.leadMs ?? 2200;
-    if (running) this.stripeOffset = (this.stripeOffset + (dtMs * Z_FAR) / lead) % 1.5;
+    // The floor runs with game time: slower in slow motion.
+    if (running) this.stripeOffset = (this.stripeOffset + (dtMs * game.timeScale * Z_FAR) / lead) % 1.5;
+    this.magnet = game.magnetized;
     this.particles.update(dtMs);
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -300,6 +316,16 @@ export class GameRenderer {
     this.drawFloaters(ctx, now);
     this.drawComboRing(ctx, g, now);
     ctx.restore();
+
+    if (game.slowed) {
+      // Slow motion: a cool violet vignette that breathes slowly.
+      const breath = 0.22 + 0.06 * Math.sin(now / 420);
+      const vignette = ctx.createRadialGradient(g.w / 2, g.h / 2, g.h * 0.3, g.w / 2, g.h / 2, g.h * 0.9);
+      vignette.addColorStop(0, rgba(PALETTE.violet, 0));
+      vignette.addColorStop(1, rgba(PALETTE.violet, breath));
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, g.w, g.h);
+    }
 
     if (now < this.missFlashUntil) {
       const t = (this.missFlashUntil - now) / 380;
@@ -545,7 +571,9 @@ export class GameRenderer {
         break;
       }
       case 'ORB': {
-        const x = this.laneX(g, item.lane, z);
+        // With a magnet, orbs from other lanes curve in towards the runner as they come.
+        const pull = this.magnet ? clamp(1 - z / 7, 0, 1) ** 1.5 : 0;
+        const x = lerp(this.laneX(g, item.lane, z), this.laneX(g, this.laneVisual, z), pull);
         const y = baseY - unit * 0.5;
         const orb = sprite('orb');
         if (orb) {
@@ -568,10 +596,14 @@ export class GameRenderer {
         break;
       }
       case 'SHIELD':
-      case 'BOOST': {
+      case 'BOOST':
+      case 'MAGNET':
+      case 'SLOWMO':
+      case 'HEART': {
         const x = this.laneX(g, item.lane, z);
         const y = baseY - unit * 0.55;
-        const icon = sprite(item.kind === 'SHIELD' ? 'shield' : 'boost');
+        const look = POWER_LOOK[item.kind];
+        const icon = sprite(look.sprite);
         if (icon) {
           const size = unit * (0.62 + Math.sin(now / 200) * 0.03);
           const bob = Math.sin(now / 260) * unit * 0.03;
@@ -579,7 +611,7 @@ export class GameRenderer {
           break;
         }
         const r = unit * (0.17 + Math.sin(now / 200) * 0.015);
-        const color = item.kind === 'SHIELD' ? PALETTE.success : PALETTE.warn;
+        const color = look.color;
         ctx.globalCompositeOperation = 'lighter';
         if (this.glow) {
           ctx.fillStyle = rgba(color, 0.18);
@@ -876,6 +908,24 @@ export class GameRenderer {
       ctx.beginPath();
       ctx.arc(p.x, p.y, w * 1.1, 0, Math.PI * 2);
       ctx.fill();
+    }
+    if (game.magnetized) {
+      // Magnet field: arcs on both sides of the runner, pulsing inwards.
+      const c = this.avatarChest;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = rgba(PALETTE.pink, 0.55);
+      ctx.lineWidth = Math.max(1.5, px * 0.09);
+      for (let k = 0; k < 3; k++) {
+        const r = px * (1.6 + k * 0.55) - ((now / 18) % (px * 0.55));
+        if (r <= px * 0.8) continue;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, r, -0.55, 0.55);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, r, Math.PI - 0.55, Math.PI + 0.55);
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = 'source-over';
     }
     if (game.shield) {
       // Shield bubble around the runner.

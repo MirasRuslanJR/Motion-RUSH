@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Heart power-up: gives a life back (points when energy is full). -->
+  <defs>
+    <linearGradient id="heart" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff9ac0"/>
+      <stop offset="1" stop-color="#ff4f6d"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path d="M64 108 C30 84 14 64 14 44 C14 28 26 16 42 16 C52 16 60 22 64 30 C68 22 76 16 86 16 C102 16 114 28 114 44 C114 64 98 84 64 108 Z" fill="url(#heart)" stroke="#ffd0e6" stroke-width="3" stroke-linejoin="round" filter="url(#glow)"/>
+  <ellipse cx="40" cy="38" rx="11" ry="7" fill="#ffffff" fill-opacity="0.35" transform="rotate(-30 40 38)"/>
+  <path d="M64 46 V76 M49 61 H79" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/>
+</svg>

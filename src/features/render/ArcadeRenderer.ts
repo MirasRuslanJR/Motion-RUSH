@@ -2,7 +2,8 @@ import type { MotionFrame } from '../engine/MotionEngine';
 import { BODY_GROUP_JOINTS, FreezeGame } from '../arcade/freeze';
 import { STARS, StarCatch, type Pop, type Star } from '../arcade/starCatch';
 import type { ArcadeGame } from '../arcade/types';
-import { lm } from '../tracking/landmarks';
+import { angleDiff, armAngles, DANCE_CONFIG } from '../dance/dance';
+import { LM, lm } from '../tracking/landmarks';
 import { coverMapping, mapLen, mapX, mapY, observeCanvas, type ViewMapping } from './canvas';
 import { PALETTE, rgba } from './palette';
 
@@ -174,9 +175,11 @@ export class ArcadeRenderer {
   // ── Freeze! ─────────────────────────────────────────────────────────
 
   private drawFreeze(ctx: CanvasRenderingContext2D, game: FreezeGame, frame: Readonly<MotionFrame>, width: number, height: number, now: number): void {
-    const color = game.light === 'red' ? PALETTE.error : game.light === 'green' ? PALETTE.success : PALETTE.white;
-    const strength = game.light === 'red' ? 0.9 : game.light === 'green' ? 0.7 : 0.3;
-    const pulse = game.light === 'red' ? 0.75 + 0.25 * Math.sin(now / 120) : 1;
+    const statue = game.lastStatue && game.time - game.lastStatue.at < 900 ? 1 - (game.time - game.lastStatue.at) / 900 : 0;
+    const color =
+      statue > 0 ? GOLD : game.light === 'red' ? PALETTE.error : game.light === 'yellow' ? PALETTE.warn : game.light === 'green' ? PALETTE.success : PALETTE.white;
+    const strength = statue > 0 ? 0.6 + statue * 0.6 : game.light === 'red' ? 0.9 : game.light === 'yellow' ? 0.85 : game.light === 'green' ? 0.7 : 0.3;
+    const pulse = game.light === 'red' ? 0.75 + 0.25 * Math.sin(now / 120) : game.light === 'yellow' ? 0.7 + 0.3 * Math.sin(now / 70) : 1;
     // The light as a glowing frame around the picture.
     const edge = Math.min(width, height) * 0.09;
     const sides: [number, number, number, number, number, number, number, number][] = [
@@ -192,9 +195,45 @@ export class ArcadeRenderer {
       ctx.fillStyle = g;
       ctx.fillRect(x, y, w, h);
     }
+    const pose = frame.displayPose;
+    // The called figure as dashed target arms from the player's own shoulders — green when an arm is in place.
+    const figure = game.figure;
+    if (figure && pose && (game.light === 'yellow' || game.light === 'red')) {
+      const ls = lm(pose, LM.LEFT_SHOULDER);
+      const rs = lm(pose, LM.RIGHT_SHOULDER);
+      if (Math.min(ls.v, rs.v) >= 0.5) {
+        const reach = Math.hypot(rs.x - ls.x, rs.y - ls.y) * 1.45;
+        const arms = armAngles(pose);
+        const sides = [
+          { s: ls, target: figure.pose.left, actual: arms.left, out: -1 },
+          { s: rs, target: figure.pose.right, actual: arms.right, out: 1 },
+        ] as const;
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineWidth = Math.max(4, this.len(0.012));
+        for (const { s, target, actual, out } of sides) {
+          const rad = (target * Math.PI) / 180;
+          const ex = s.x + out * Math.sin(rad) * reach;
+          const ey = s.y + Math.cos(rad) * reach;
+          const ok = arms.visible && angleDiff(actual, target) <= DANCE_CONFIG.exactDeg + 8;
+          const tone = ok ? PALETTE.success : game.light === 'yellow' ? PALETTE.warn : PALETTE.white;
+          ctx.strokeStyle = rgba(tone, 0.9);
+          ctx.setLineDash([this.len(0.02), this.len(0.016)]);
+          ctx.beginPath();
+          ctx.moveTo(this.x(s.x), this.y(s.y));
+          ctx.lineTo(this.x(ex), this.y(ey));
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = rgba(tone, ok ? 0.9 : 0.5);
+          ctx.beginPath();
+          ctx.arc(this.x(ex), this.y(ey), Math.max(8, this.len(0.022)), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
     // Caught: the part that moved lights up for a moment.
     const caught = game.lastCatch;
-    const pose = frame.displayPose;
     if (caught && pose && game.time - caught.at < 1600) {
       const fade = 1 - (game.time - caught.at) / 1600;
       ctx.strokeStyle = rgba(PALETTE.error, 0.95 * fade);
