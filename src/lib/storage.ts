@@ -87,7 +87,11 @@ export interface RecordedSession {
   previousBest: number;
 }
 
-export function recordSession(mode: string, entry: LeaderboardEntry): RecordedSession {
+/**
+ * `countsForProfile: false` keeps the mode's own board but leaves the overall
+ * best score and combo alone (mini-games score on different scales).
+ */
+export function recordSession(mode: string, entry: LeaderboardEntry, { countsForProfile = true } = {}): RecordedSession {
   const profile = loadProfile();
   const previousBest = bestFor(profile, mode);
   const board = [...(profile.leaderboards[mode] ?? []), entry]
@@ -97,8 +101,8 @@ export function recordSession(mode: string, entry: LeaderboardEntry): RecordedSe
   const next: Profile = {
     ...profile,
     sessions: profile.sessions + 1,
-    bestScore: Math.max(profile.bestScore, entry.score),
-    bestCombo: Math.max(profile.bestCombo, entry.bestCombo),
+    bestScore: countsForProfile ? Math.max(profile.bestScore, entry.score) : profile.bestScore,
+    bestCombo: countsForProfile ? Math.max(profile.bestCombo, entry.bestCombo) : profile.bestCombo,
     leaderboards: { ...profile.leaderboards, [mode]: board },
   };
   saveProfile(next);

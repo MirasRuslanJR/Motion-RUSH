@@ -15,6 +15,7 @@ import { useMotionUi } from '../hooks/useEngine';
 import { sfx } from '../lib/audio/sfx';
 import { DEBUG } from '../lib/env';
 import { loadProfile, recordSession, saveMuted, type Profile, type RecordedSession } from '../lib/storage';
+import { ArcadeScreen, type ArcadeRunResult } from '../screens/arcade/ArcadeScreen';
 import { CalibrationScreen } from '../screens/CalibrationScreen';
 import { CameraCheckScreen } from '../screens/CameraCheckScreen';
 import { CameraErrorScreen } from '../screens/CameraErrorScreen';
@@ -206,6 +207,17 @@ export function App() {
     return saved;
   }, []);
 
+  /** Mini-games: a record on this device, kept apart from the overall best score. */
+  const onArcadeRecord = useCallback((run: ArcadeRunResult): RecordedSession => {
+    const saved = recordSession(
+      run.mode,
+      { score: run.score, accuracy: run.accuracy, bestCombo: run.bestCombo, outcome: 'complete', date: new Date().toISOString() },
+      { countsForProfile: false },
+    );
+    setProfile(saved.profile);
+    return saved;
+  }, []);
+
   const goHome = useCallback(() => {
     replaceEngine(null);
     setProfile(loadProfile());
@@ -277,6 +289,21 @@ export function App() {
     case 'versus':
       if (engine) screen = <VersusScreen key={flow.runId} engine={engine} mode={getMode(flow.mode)} onAgain={onPlayAgain} onModes={onModes} />;
       break;
+    case 'arcade':
+      if (engine) {
+        screen = (
+          <ArcadeScreen
+            key={flow.runId}
+            engine={engine}
+            mode={getMode(flow.mode)}
+            profile={profile}
+            onRecord={onArcadeRecord}
+            onAgain={onPlayAgain}
+            onModes={onModes}
+          />
+        );
+      }
+      break;
     case 'lobby':
       if (engine) {
         screen = (
@@ -338,7 +365,7 @@ export function App() {
         <div className="app__screens">
           <AnimatePresence initial={false}>
             <motion.div
-              key={flow.phase === 'game' || flow.phase === 'dance' || flow.phase === 'versus' ? `${flow.phase}-${flow.runId}` : flow.phase}
+              key={flow.phase === 'game' || flow.phase === 'dance' || flow.phase === 'versus' || flow.phase === 'arcade' ? `${flow.phase}-${flow.runId}` : flow.phase}
               className="app__screen"
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}

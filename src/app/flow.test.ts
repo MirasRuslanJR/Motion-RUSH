@@ -39,6 +39,17 @@ describe('app flow', () => {
     expect(run([{ type: 'MODES' }], done).phase).toBe('modes');
   });
 
+  it('mini-games open the arcade screen and replay in place', () => {
+    const modes = run(setup);
+    const arcade = run([{ type: 'SELECT_MODE', mode: 'stars' }], modes);
+    expect(arcade).toMatchObject({ phase: 'arcade', mode: 'stars', runId: 1 });
+    expect(run([{ type: 'PLAY_AGAIN' }], arcade)).toMatchObject({ phase: 'arcade', mode: 'stars', runId: 2 });
+    expect(run([{ type: 'MODES' }], arcade).phase).toBe('modes');
+    for (const mode of ['freeze', 'reaction', 'squats'] as const) {
+      expect(run([{ type: 'SELECT_MODE', mode }], modes).phase).toBe('arcade');
+    }
+  });
+
   it('online duel goes through the lobby and rematches there', () => {
     const lobby = run([...setup, { type: 'SELECT_MODE', mode: 'duel' }]);
     expect(lobby.phase).toBe('lobby');

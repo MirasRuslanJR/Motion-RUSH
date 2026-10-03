@@ -43,7 +43,8 @@ function unavailable(mode: GameModeDef, profile: Profile): string | null {
 function metaOf(mode: GameModeDef): string {
   const parts: string[] = [];
   if (mode.players === 2) parts.push('2 игрока');
-  if (mode.kind === 'dance') parts.push('танец');
+  if (mode.facts) parts.push(mode.facts);
+  else if (mode.kind === 'dance') parts.push('танец');
   else parts.push(mode.practice ? 'без штрафов' : lives(mode.energy));
   return parts.join(' · ');
 }

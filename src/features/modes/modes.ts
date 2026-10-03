@@ -17,17 +17,25 @@ export type GameModeId =
   | 'dance'
   | 'dance-duo'
   | 'versus'
-  | 'duel';
+  | 'duel'
+  | 'stars'
+  | 'freeze'
+  | 'reaction'
+  | 'squats';
 
 /** Groups for the mode picker. */
-export type ModeCategory = 'run' | 'dance' | 'duo' | 'online';
+export type ModeCategory = 'run' | 'arcade' | 'dance' | 'duo' | 'online';
 
 export const MODE_CATEGORIES: { id: ModeCategory; title: string }[] = [
   { id: 'run', title: 'Бег' },
+  { id: 'arcade', title: 'Мини-игры' },
   { id: 'dance', title: 'Танцы' },
   { id: 'duo', title: 'Вдвоём' },
   { id: 'online', title: 'Онлайн' },
 ];
+
+/** Arcade mini-games (see features/arcade). */
+export type ArcadeKind = 'stars' | 'freeze' | 'reaction' | 'squats';
 
 export type ModeIconName =
   | 'run'
@@ -42,15 +50,23 @@ export type ModeIconName =
   | 'note'
   | 'notes'
   | 'duo'
-  | 'globe';
+  | 'globe'
+  | 'star'
+  | 'freeze'
+  | 'reflex'
+  | 'squat';
 
 export interface GameModeDef {
   id: GameModeId;
   category: ModeCategory;
   /** Pictogram on the mode card. */
   icon: ModeIconName;
-  /** runner = obstacle course; dance = dance floor (match poses to the beat). */
-  kind: 'runner' | 'dance';
+  /** runner = obstacle course; dance = dance floor (match poses to the beat); arcade = a mini-game. */
+  kind: 'runner' | 'dance' | 'arcade';
+  /** Which mini-game (kind = arcade). */
+  arcade?: ArcadeKind;
+  /** Short facts for the card instead of lives ("60 с · руки"). */
+  facts?: string;
   /** 2 = two players in front of one camera (left / right half of the frame). */
   players: 1 | 2;
   /** Display title (EN, short, like the rest of the HUD). */
@@ -83,7 +99,22 @@ export interface GameModeDef {
  */
 const DUO_TIMING: GameRules['timing'] = { airtimeMs: 900, clearGraceMs: 450, duckGraceMs: 320 };
 
-const RUNNER ={ kind: 'runner', players: 1, practice: false, seed: 'random', ranked: true, online: false } as const;
+const RUNNER = { kind: 'runner', players: 1, practice: false, seed: 'random', ranked: true, online: false } as const;
+/**
+ * Mini-games keep records on this device only: the global leaderboard table
+ * accepts the runner and dance modes (see supabase/schema.sql).
+ */
+const ARCADE = {
+  kind: 'arcade',
+  category: 'arcade',
+  players: 1,
+  practice: false,
+  seed: 'random',
+  ranked: false,
+  online: false,
+  course: 'standard',
+  energy: GAME_CONFIG.energy,
+} as const;
 
 const ALL_MODES: readonly GameModeDef[] = [
   {
@@ -112,6 +143,30 @@ const ALL_MODES: readonly GameModeDef[] = [
     course: 'standard',
     energy: GAME_CONFIG.energy,
     goal: 'Попадай в ритм',
+  },
+  {
+    ...ARCADE,
+    id: 'stars',
+    icon: 'star',
+    arcade: 'stars',
+    title: 'Star Catch',
+    badge: 'РУКИ',
+    tagline: 'Звёзды вспыхивают вокруг тебя — лови их руками, пока не погасли, и не задень бомбы',
+    accent: '#ffd24d',
+    goal: 'Лови звёзды',
+    facts: '60 с · 3 жизни',
+  },
+  {
+    ...ARCADE,
+    id: 'freeze',
+    icon: 'freeze',
+    arcade: 'freeze',
+    title: 'Freeze!',
+    badge: 'ЗАМРИ',
+    tagline: 'Зелёный — беги на месте, красный — замри. Камера заметит любое движение',
+    accent: '#3dffb0',
+    goal: 'Добеги до финиша',
+    facts: '100 м · 3 жизни',
   },
   {
     ...RUNNER,
@@ -223,6 +278,30 @@ const ALL_MODES: readonly GameModeDef[] = [
     course: 'lanes',
     energy: GAME_CONFIG.energy,
     goal: 'Меняй полосы',
+  },
+  {
+    ...ARCADE,
+    id: 'reaction',
+    icon: 'reflex',
+    arcade: 'reaction',
+    title: 'Reaction',
+    badge: 'РЕАКЦИЯ',
+    tagline: 'Жди сигнала и сделай показанное движение быстрее всех — время в миллисекундах',
+    accent: '#5ab0ff',
+    goal: 'Быстрее',
+    facts: '10 раундов',
+  },
+  {
+    ...ARCADE,
+    id: 'squats',
+    icon: 'squat',
+    arcade: 'squats',
+    title: 'Squat 30',
+    badge: 'ЧЕЛЛЕНДЖ',
+    tagline: 'Сколько полных приседаний успеешь за 30 секунд? Игра следит за глубиной',
+    accent: '#ff8a3d',
+    goal: 'Приседай',
+    facts: '30 с',
   },
   {
     ...RUNNER,

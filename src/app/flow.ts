@@ -20,6 +20,7 @@ export type Phase =
   | 'game'
   | 'dance'
   | 'versus'
+  | 'arcade'
   | 'results';
 
 export interface FlowState {
@@ -88,6 +89,7 @@ export function flowReducer(state: FlowState, action: FlowAction): FlowState {
     case 'SELECT_MODE':
       if (action.mode === 'duel') return { ...state, mode: 'duel', phase: 'lobby', duelSeed: null };
       if (getMode(action.mode).kind === 'dance') return { ...state, mode: action.mode, phase: 'dance', runId: state.runId + 1, duelSeed: null };
+      if (getMode(action.mode).kind === 'arcade') return { ...state, mode: action.mode, phase: 'arcade', runId: state.runId + 1, duelSeed: null };
       if (getMode(action.mode).players === 2) return { ...state, mode: action.mode, phase: 'versus', runId: state.runId + 1, duelSeed: null };
       return newRun(state, { mode: action.mode, duelSeed: null });
     case 'DUEL_START':
@@ -95,7 +97,7 @@ export function flowReducer(state: FlowState, action: FlowAction): FlowState {
     case 'GAME_OVER':
       return state.phase === 'game' ? { ...state, phase: 'results', result: action.result } : state;
     case 'PLAY_AGAIN':
-      if (state.phase === 'dance' || state.phase === 'versus') return { ...state, runId: state.runId + 1 };
+      if (state.phase === 'dance' || state.phase === 'versus' || state.phase === 'arcade') return { ...state, runId: state.runId + 1 };
       return state.mode === 'duel' ? { ...state, phase: 'lobby', duelSeed: null } : newRun(state);
     case 'MODES':
       return { ...state, phase: 'modes' };
