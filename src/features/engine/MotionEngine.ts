@@ -197,6 +197,7 @@ export class MotionEngine {
   private primaryCenter: { x: number; y: number } | null = null;
   private disposed = false;
   private players = 1;
+  private twoPlayerClaims = 0;
   /** Frame aspect the single-player baseline was captured in. */
   private baselineAspect = 0;
   private readonly peopleBuffers: Pose[] = [createPose(), createPose()];
@@ -296,7 +297,7 @@ export class MotionEngine {
    * each with their own tracker. Two trackers cost about twice the inference time.
    * The camera switches to its whole (16:9) width for them and back afterwards.
    */
-  setPlayers(players: 1 | 2): void {
+  private setPlayers(players: 1 | 2): void {
     if (players === this.players) return;
     this.players = players;
     this.backend?.setSplit(players === 2);
@@ -305,6 +306,24 @@ export class MotionEngine {
     this.frame.displayPlayers = players === 2 ? [null, null] : [];
     this.frame.twoPlayer = players === 2 ? 'loading' : 'off';
     this.ui.set({ multiplePeople: false });
+  }
+
+  /**
+   * A two-player screen claims two-player tracking for as long as it is mounted and
+   * calls the returned function when it goes away. Screens cross-fade, so on a rematch
+   * the new screen claims before the old one releases: counting claims keeps tracking
+   * for two instead of switching it off under the new screen.
+   */
+  claimTwoPlayers(): () => void {
+    this.twoPlayerClaims++;
+    this.setPlayers(2);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.twoPlayerClaims--;
+      if (this.twoPlayerClaims === 0) this.setPlayers(1);
+    };
   }
 
   /** What the current screen wants from the player; drives the error-mode diagnosis. */

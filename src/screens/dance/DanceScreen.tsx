@@ -146,11 +146,11 @@ export function DanceScreen({ engine, mode, profile, onRecord, onProfile, onAgai
 
   useEffect(() => {
     engine.setExpected(null);
-    engine.setPlayers(players);
+    const release = players === 2 ? engine.claimTwoPlayers() : null;
     const canvas = canvasRef.current;
     if (canvas) rendererRef.current = new DanceRenderer(canvas);
     return () => {
-      engine.setPlayers(1);
+      release?.();
       music.stop();
       rendererRef.current?.dispose();
       rendererRef.current = null;

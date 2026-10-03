@@ -116,7 +116,7 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
 
   useEffect(() => {
     engine.setExpected(null);
-    engine.setPlayers(2);
+    const release = engine.claimTwoPlayers();
     const list: GameRenderer[] = [];
     for (let i = 0; i < 2; i++) {
       const c = canvases.current[i];
@@ -128,7 +128,7 @@ export function VersusScreen({ engine, mode, onAgain, onModes }: VersusScreenPro
     }
     renderers.current = list;
     return () => {
-      engine.setPlayers(1);
+      release();
       for (const r of list) r.dispose();
       renderers.current = [];
     };
