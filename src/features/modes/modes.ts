@@ -22,7 +22,8 @@ export type GameModeId =
   | 'stars'
   | 'freeze'
   | 'reaction'
-  | 'squats';
+  | 'squats'
+  | 'boss';
 
 /** Groups for the mode picker. */
 export type ModeCategory = 'run' | 'arcade' | 'dance' | 'duo' | 'online';
@@ -36,7 +37,7 @@ export const MODE_CATEGORIES: { id: ModeCategory; title: string }[] = [
 ];
 
 /** Arcade mini-games (see features/arcade). */
-export type ArcadeKind = 'stars' | 'freeze' | 'reaction' | 'squats';
+export type ArcadeKind = 'stars' | 'freeze' | 'reaction' | 'squats' | 'boss';
 
 export type ModeIconName =
   | 'run'
@@ -55,7 +56,8 @@ export type ModeIconName =
   | 'star'
   | 'freeze'
   | 'reflex'
-  | 'squat';
+  | 'squat'
+  | 'boss';
 
 export interface GameModeDef {
   id: GameModeId;
@@ -159,6 +161,17 @@ const ALL_MODES: readonly GameModeDef[] = [
     goal: 'Попадай в ритм',
   },
   {
+    ...ARCADE,
+    id: 'boss',
+    icon: 'boss',
+    arcade: 'boss',
+    title: 'Boss Fight',
+    badge: 'БОСС',
+    tagline: 'Босс бьёт по полосам, лучом и волной — уклоняйся всем телом, а когда он оглушён, руки вверх — удар',
+    accent: '#ff5a6e',
+    goal: 'Победи босса',
+    facts: '5 ударов · 3 жизни',
+  },  {
     ...ARCADE,
     id: 'stars',
     icon: 'star',
@@ -388,7 +401,7 @@ export function seedForMode(mode: GameModeDef, sharedSeed?: number): number {
  */
 export function supportsDifficulty(mode: GameModeDef): boolean {
   if (mode.practice || mode.online || mode.seed === 'daily') return false;
-  return mode.kind !== 'arcade' || mode.arcade === 'stars' || mode.arcade === 'freeze';
+  return mode.kind !== 'arcade' || mode.arcade === 'stars' || mode.arcade === 'freeze' || mode.arcade === 'boss';
 }
 
 /** The difficulty a mode is actually played at. */

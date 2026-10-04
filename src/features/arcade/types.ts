@@ -51,6 +51,8 @@ export interface ArcadeHud {
   figure?: { name: string; left: number; right: number; state: 'soon' | 'now' | 'hit' } | null;
   /** A race to the finish: a runner rides the progress bar. */
   runner?: boolean;
+  /** Boss fight: the boss's health. */
+  boss?: { hp: number; max: number; stunned: boolean } | null;
 }
 
 export interface ArcadeResult {

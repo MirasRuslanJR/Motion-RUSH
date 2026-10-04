@@ -32,7 +32,7 @@ interface MenuItem {
 }
 
 const byCategory = (c: ModeCategory) => GAME_MODES.filter((m) => m.category === c).map((m) => m.id);
-const HITS: readonly GameModeId[] = ['classic', 'dance', 'stars', 'freeze', 'versus'];
+const HITS: readonly GameModeId[] = ['classic', 'boss', 'dance', 'stars', 'freeze', 'versus'];
 
 const ITEMS: readonly MenuItem[] = [
   { id: 'play', title: 'Играть', eyebrow: 'Быстрый старт · лучшие режимы', modes: HITS },
@@ -132,7 +132,7 @@ interface MenuScreenProps {
  */
 export function MenuScreen({ engine, ready, profile, lastMode, invite, muted, onToggleMute, onPlay, onTutorial, onLeaderboard, onProfile }: MenuScreenProps) {
   const items = useMemo(
-    () => ITEMS.map((item) => (item.id === 'play' ? { ...item, modes: [...new Set([lastMode, ...HITS])].slice(0, 5) } : item)),
+    () => ITEMS.map((item) => (item.id === 'play' ? { ...item, modes: [...new Set([lastMode, ...HITS])].slice(0, 6) } : item)),
     [lastMode],
   );
   const [active, setActive] = useState<ItemId>(invite ? 'online' : 'play');

@@ -3,6 +3,7 @@ import type { Point } from '../../lib/math/geometry';
 import type { GestureEvent, GestureType } from '../gestures/types';
 import { LM, type Pose } from '../tracking/landmarks';
 import { buildSyntheticPose } from '../tracking/syntheticPose';
+import { BOSS, BossFight } from './boss';
 import { FREEZE, FreezeGame, motionEnergy } from './freeze';
 import { REACTION, ReactionGame } from './reaction';
 import { SQUATS, SquatGame } from './squats';
@@ -323,5 +324,109 @@ describe('Squat 30', () => {
     for (let t = 0; t < SQUATS.durationMs && !game.done; t += 500) game.update(input(pose), 500);
     expect(game.done).toBe(true);
     expect(game.result().headline).toBe('1');
+  });
+});
+
+/** A player who does what the boss's attack needs: out of the struck lanes, down under a beam, up over a wave, both arms up when it is stunned. */
+function bossDodger() {
+  const jumped = new Set<number>();
+  return (game: BossFight): ArcadeInput => {
+    const t = game.time;
+    const down = figurePose(0, 0);
+    if (game.phase === 'stunned') return input(figurePose(155, 155));
+    const a = game.attack;
+    if (!a || a.result !== 'pending') return input(down);
+    if (a.kind === 'beam') return input(down, { vertical: t >= a.hitAt - 200 ? 'CROUCH' : null });
+    if (a.kind === 'wave') {
+      const go = t >= a.hitAt - 120 && !jumped.has(a.id);
+      if (go) jumped.add(a.id);
+      return input(down, { events: go ? [gesture('JUMP', 'start', t)] : [], vertical: jumped.has(a.id) ? 'JUMP' : null });
+    }
+    const free = ([-1, 0, 1] as const).find((l) => !a.lanes.includes(l)) ?? 0;
+    return input(down, { lateral: free === -1 ? 'LEAN_LEFT' : free === 1 ? 'LEAN_RIGHT' : null });
+  };
+}
+
+function fight(game: BossFight, player: (g: BossFight) => ArcadeInput, maxMs = 300_000): void {
+  for (let t = 0; t < maxMs && !game.done; t += 16) game.update(player(game), 16);
+}
+
+describe('Boss fight', () => {
+  it('a player who dodges everything stuns the boss every three dodges, hits it with both arms up and wins', () => {
+    const game = new BossFight(5);
+    fight(game, bossDodger());
+    expect(game.phase).toBe('won');
+    expect(game.hp).toBe(0);
+    expect(game.counters).toBe(BOSS.hp);
+    expect(game.lives).toBe(BOSS.lives);
+    expect(game.dodges).toBe(game.attacks);
+    expect(game.attacks).toBe(BOSS.hp * BOSS.streakForStun);
+    expect(game.result().caption).toBe('босс повержен');
+  });
+
+  it('every kind of attack comes once first', () => {
+    const game = new BossFight(3);
+    const kinds = new Map<number, string>();
+    const dodge = bossDodger();
+    for (let t = 0; t < 60_000 && kinds.size < 4; t += 16) {
+      game.update(dodge(game), 16);
+      if (game.attack) kinds.set(game.attack.id, game.attack.kind);
+    }
+    expect([...kinds.values()].sort()).toEqual(['beam', 'lane', 'sweep', 'wave']);
+  });
+
+  it('standing still gets hit — each hit says why — until the lives run out', () => {
+    const game = new BossFight(11);
+    fight(game, () => input(figurePose(0, 0)));
+    expect(game.phase).toBe('lost');
+    expect(game.lives).toBe(0);
+    expect(game.hp).toBe(BOSS.hp);
+    expect(game.hud().toast?.tone).toBe('bad');
+    expect(game.result().caption).toMatch(/жизни кончились/);
+  });
+
+  it('a stunned boss needs both arms up — arms down lets it recover, and a jump’s swing does not count by itself', () => {
+    const game = new BossFight(2);
+    const dodge = bossDodger();
+    for (let t = 0; t < 60_000 && game.phase !== 'stunned'; t += 16) game.update(dodge(game), 16);
+    expect(game.phase).toBe('stunned');
+    // Arms already up the moment it is stunned: too early to count.
+    game.update(input(figurePose(155, 155)), 16);
+    expect(game.hp).toBe(BOSS.hp);
+    for (let i = 0; i < Math.ceil(BOSS.stunMs / 16) + 2; i++) game.update(input(figurePose(0, 0)), 16);
+    expect(game.phase).toBe('fight');
+    expect(game.hp).toBe(BOSS.hp);
+    expect(game.hud().toast?.text).toMatch(/Не успел/);
+  });
+
+  it('asks for the move that saves the player: crouch, jump, or out of the struck lane', () => {
+    const game = new BossFight(4);
+    const seen = new Map<string, string | null>();
+    const dodge = bossDodger();
+    for (let t = 0; t < 60_000 && seen.size < 4; t += 16) {
+      const a = game.attack;
+      if (a && a.result === 'pending' && !seen.has(a.kind)) {
+        // Standing in the centre lane, before moving.
+        game.update(input(figurePose(0, 0)), 16);
+        seen.set(a.kind, game.expected);
+      }
+      game.update(dodge(game), 16);
+    }
+    expect(seen.get('beam')).toBe('CROUCH');
+    expect(seen.get('wave')).toBe('JUMP');
+    expect(['LEAN_LEFT', 'LEAN_RIGHT', null]).toContain(seen.get('lane'));
+    expect(['LEAN_LEFT', 'LEAN_RIGHT']).toContain(seen.get('sweep'));
+  });
+
+  it('difficulty: Expert warns later and has a life less, Easy a life more', () => {
+    const expert = new BossFight(1, { pace: 1.3, lives: -1, score: 1.5 });
+    const easy = new BossFight(1, { pace: 0.8, lives: 1, score: 0.8 });
+    expect(expert.lives).toBe(BOSS.lives - 1);
+    expect(easy.lives).toBe(BOSS.lives + 1);
+    const warn = (g: BossFight) => {
+      for (let t = 0; t < 10_000 && !g.attack; t += 16) g.update(input(figurePose(0, 0)), 16);
+      return (g.attack?.hitAt ?? 0) - (g.attack?.startAt ?? 0);
+    };
+    expect(warn(expert)).toBeLessThan(warn(easy));
   });
 });

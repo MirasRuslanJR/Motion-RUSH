@@ -171,6 +171,62 @@
   --tone: var(--warn);
 }
 
+/* Boss fight: the boss's health, top centre. */
+.arcade__boss {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  translate: -50% 0;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-m);
+  border: 1px solid rgba(255, 90, 110, 0.5);
+  background: rgba(8, 9, 16, 0.8);
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ff8f9d;
+}
+
+.arcade__boss.is-stunned {
+  border-color: var(--warn);
+  color: var(--warn);
+  box-shadow: 0 0 24px -6px var(--warn);
+}
+
+.arcade__boss-hp {
+  display: flex;
+  gap: 4px;
+}
+
+.arcade__boss-hp i {
+  width: 22px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1.5px solid rgba(255, 90, 110, 0.6);
+}
+
+.arcade__boss-hp i.is-full {
+  background: #ff5a6e;
+  border-color: #ff5a6e;
+  box-shadow: 0 0 8px rgba(255, 90, 110, 0.7);
+}
+/* Boss fight: the cue sits below the boss's head and is a little smaller. */
+.arcade--boss .arcade__middle {
+  padding-top: 13vh;
+}
+
+.arcade--boss .arcade__cue {
+  padding: 10px 22px;
+}
+
+.arcade--boss .arcade__cue strong {
+  font-size: clamp(24px, 3.2vw, 44px);
+}
+
 /* Freeze!: a runner rides the progress bar to the finish flag. */
 .arcade__progress.has-runner {
   position: relative;
@@ -546,6 +602,19 @@
   }
   .arcade__progress.has-runner {
     margin: 20px 26px 0 6px;
+  }
+  .arcade__boss {
+    top: 10px;
+    gap: 4px;
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+  .arcade--boss .arcade__middle {
+    padding-top: 7vh;
+  }
+  .arcade__boss-hp i {
+    width: 16px;
+    height: 8px;
   }
   .arcade__intro-rules {
     display: grid;

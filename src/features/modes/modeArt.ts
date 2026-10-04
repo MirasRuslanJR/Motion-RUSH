@@ -1,3 +1,4 @@
+import bossArt from '../../assets/modes/boss.svg';
 import danceDuoArt from '../../assets/modes/dance-duo.svg';
 import danceArt from '../../assets/modes/dance.svg';
 import duoArt from '../../assets/modes/duo.svg';
@@ -19,6 +20,7 @@ const ART: Partial<Record<GameModeId, string>> = {
   freeze: freezeArt,
   reaction: reactionArt,
   squats: squatsArt,
+  boss: bossArt,
 };
 
 export function modeArt(id: GameModeId): string {

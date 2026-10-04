@@ -5,6 +5,7 @@ import { HoldGesture } from '../../components/HoldGesture';
 import { Icon } from '../../components/Icon';
 import { ModeIcon } from '../../components/ModeIcon';
 import { PoseGlyph } from '../../components/PoseGlyph';
+import { BossFight } from '../../features/arcade/boss';
 import { FreezeGame } from '../../features/arcade/freeze';
 import { ReactionGame } from '../../features/arcade/reaction';
 import { SquatGame } from '../../features/arcade/squats';
@@ -61,9 +62,14 @@ const RULES: Record<ArcadeKind, string[]> = {
     'Засчитывается присед до конца вниз и снова вверх',
     'Неглубоко или с наклоном — игра подскажет, как правильно',
   ],
+  boss: [
+    'Босс бьёт по полосам: красная полоса — уйди с неё шагом в сторону',
+    'Луч на уровне головы — присядь, волна по полу — подпрыгни',
+    'Три уклонения подряд — босс оглушён: обе руки вверх — удар. Пять ударов — победа',
+  ],
 };
 
-const MUSIC: Record<ArcadeKind, boolean> = { stars: true, freeze: true, reaction: false, squats: true };
+const MUSIC: Record<ArcadeKind, boolean> = { stars: true, freeze: true, reaction: false, squats: true, boss: true };
 const TOAST_MS = 2200;
 const COUNTDOWN_STEP_MS = 700;
 
@@ -77,6 +83,8 @@ function createGame(kind: ArcadeKind, scheme: ControlScheme, tune: ArcadeTune): 
       return new ReactionGame((move) => motionMeta(move, scheme).title);
     case 'squats':
       return new SquatGame();
+    case 'boss':
+      return new BossFight(undefined, tune);
   }
 }
 
@@ -245,7 +253,7 @@ export function ArcadeScreen({ engine, mode, difficulty, profile, onRecord, onAg
   const record = recorded ? bestFor(recorded.profile, mode.id) : best;
 
   return (
-    <main className="screen arcade" style={{ '--accent': mode.accent } as CSSProperties}>
+    <main className={`screen arcade arcade--${kind}`} style={{ '--accent': mode.accent } as CSSProperties}>
       <section className="arcade__stage" aria-label={mode.title}>
         <CameraViewport engine={engine} variant="stage" hud={false} trail={kind === 'stars'} className="arcade__camera">
           <canvas ref={canvasRef} className="arcade__canvas" aria-hidden="true" />
@@ -271,6 +279,16 @@ export function ArcadeScreen({ engine, mode, difficulty, profile, onRecord, onAg
               <strong className="arcade__counter">{hud.counter}</strong>
             </div>
           </div>
+          {hud.boss && (
+            <div className={`arcade__boss ${hud.boss.stunned ? 'is-stunned' : ''}`} role="img" aria-label={`Босс: ${hud.boss.hp} из ${hud.boss.max}`}>
+              <span>{hud.boss.stunned ? 'Босс оглушён' : 'Босс'}</span>
+              <div className="arcade__boss-hp">
+                {Array.from({ length: hud.boss.max }, (_, i) => (
+                  <i key={i} className={i < (hud.boss?.hp ?? 0) ? 'is-full' : undefined} />
+                ))}
+              </div>
+            </div>
+          )}
           {hud.progress !== null && (
             <div className={hud.runner ? 'arcade__progress has-runner' : 'arcade__progress'} aria-hidden="true">
               <div style={{ transform: `scaleX(${Math.min(1, Math.max(0, hud.progress))})` }} />
