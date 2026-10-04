@@ -18,7 +18,7 @@ import { computeSessionStats } from '../../features/results/sessionStats';
 import type { DuelRoom } from '../../features/online/DuelRoom';
 import { GameRenderer } from '../../features/render/GameRenderer';
 import { useEngineFrame, useMotionUi } from '../../hooks/useEngine';
-import { RunnerMusic } from '../../lib/audio/runnerMusic';
+import { comboLayers, RunnerMusic } from '../../lib/audio/runnerMusic';
 import { sfx } from '../../lib/audio/sfx';
 import { clamp } from '../../lib/math/geometry';
 import { useStore } from '../../lib/store';
@@ -303,11 +303,15 @@ export function GameScreen({ engine, mode, difficulty, sharedSeed = null, duel =
       else if (event.type === 'pause') music.duck(true);
       else if (event.type === 'resume') music.duck(false);
       else if (event.type === 'end') music.stop();
+      // Every dodge plays a beat of its own; a miss drops the layers the combo had built.
+      else if (event.type === 'clear') music.hit(event.quality === 'perfect');
+      else if (event.type === 'miss') music.miss();
       if (event.type === 'end') outcomeRef.current = event.outcome;
       if (event.type === 'miss') setMissToast({ id: event.item.id, message: event.reason.message });
     }
     const next = snapshot(game, mode, outcomeRef.current);
-    music.update(Math.min(3, next.stage));
+    // The combo builds the music; late in a run it never drops below one layer.
+    music.update(Math.max(comboLayers(next.combo), next.stage >= 3 ? 1 : 0));
     if (duel) {
       const opp = duel.ui.get().opponent;
       renderer?.setOpponent(opp && !opp.finished ? { name: duel.opponentName, lane: opp.lane, airborne: opp.airborne, ducking: opp.ducking } : null);

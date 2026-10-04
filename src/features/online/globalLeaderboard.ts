@@ -35,8 +35,20 @@ export async function submitScore(entry: ScoreSubmission): Promise<boolean> {
   return !error;
 }
 
-/** Top scores of a mode (all time or today). null = backend unavailable. */
-export async function fetchTopScores(mode: string, period: 'all' | 'today', limit = 20): Promise<GlobalScore[] | null> {
+/** All time, the last 7 days (today included) or today — calendar days in Astana time. */
+export type LeaderboardPeriod = 'all' | 'week' | 'today';
+
+export const PERIOD_TITLES: Record<LeaderboardPeriod, string> = { all: 'Всё время', week: 'Неделя', today: 'Сегодня' };
+
+/** The first Astana calendar day a period covers, null for all time. */
+export function periodStart(period: LeaderboardPeriod, now: Date = new Date()): string | null {
+  if (period === 'today') return astanaDay(now);
+  if (period === 'week') return astanaDay(new Date(now.getTime() - 6 * 86400000));
+  return null;
+}
+
+/** Top scores of a mode for a period. null = backend unavailable. */
+export async function fetchTopScores(mode: string, period: LeaderboardPeriod, limit = 20): Promise<GlobalScore[] | null> {
   const db = await supabase();
   if (!db) return null;
   let query = db
@@ -45,7 +57,9 @@ export async function fetchTopScores(mode: string, period: 'all' | 'today', limi
     .eq('mode', mode)
     .order('score', { ascending: false })
     .limit(limit);
-  if (period === 'today') query = query.eq('day', astanaDay());
+  const from = periodStart(period);
+  if (period === 'today' && from) query = query.eq('day', from);
+  else if (from) query = query.gte('day', from);
   const { data, error } = await query;
   if (error) return null;
   return (data ?? []) as GlobalScore[];

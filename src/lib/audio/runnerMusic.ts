@@ -24,12 +24,18 @@ const HOOK: readonly (readonly (number | null)[])[] = [
 ];
 const ARP = [0, 1, 2, 1, 0, 1, 2, 3] as const;
 
+/** How many layers the player's combo has earned: 3 in a row, 6 and 10 each add one. */
+export function comboLayers(combo: number): number {
+  return combo >= 10 ? 3 : combo >= 6 ? 2 : combo >= 3 ? 1 : 0;
+}
+
 /**
  * Background track for the runner modes and mini-games, synthesised with WebAudio
- * (no files): four-on-the-floor drums and an off-beat bass from the start; as the
- * game speeds up, claps and chord stabs, a pumping supersaw with an arpeggio, and
- * finally a hook and a rolling bass join in. Plays through the shared sound-kit
- * output, so the mute button silences it too.
+ * (no files): four-on-the-floor drums and an off-beat bass from the start; with the
+ * player's combo, claps and chord stabs, a pumping supersaw with an arpeggio, and
+ * finally a hook and a rolling bass join in, and every successful move lands a stab
+ * on the beat (see hit) — the player plays the music with the body. Plays through
+ * the shared sound-kit output, so the mute button silences it too.
  */
 export class RunnerMusic {
   private ctx: AudioContext | null = null;
@@ -62,6 +68,33 @@ export class RunnerMusic {
   /** Quieter while the game is paused (or on a red light). */
   duck(on: boolean): void {
     this.bus?.duck(on ? 0.25 : 1);
+  }
+
+  /**
+   * The player plays the music: a successful move lands a chord stab on the next eighth
+   * note (a perfect one adds a cymbal), so every dodge is heard in time with the track.
+   */
+  hit(perfect: boolean): void {
+    const ctx = this.ctx;
+    const bus = this.bus;
+    if (!ctx || !bus) return;
+    const eighth = STEP_S * 2;
+    const since = ctx.currentTime + 0.015 - this.clock.origin;
+    const at = this.clock.origin + Math.ceil(since / eighth) * eighth;
+    const step = Math.round((at - this.clock.origin) / STEP_S);
+    const notes = CHORDS[Math.floor(step / 16) % 4] ?? CHORDS[0];
+    chord(bus, notes.map((n) => n + 12), at, STEP_S * 1.4, 0.05, 3400, 0.45);
+    if (perfect) crash(bus, at, 0.1);
+  }
+
+  /** A miss: a dull drop, and the layers fall away with the combo. */
+  miss(): void {
+    const ctx = this.ctx;
+    const bus = this.bus;
+    if (!ctx || !bus) return;
+    const at = ctx.currentTime + 0.01;
+    bass(bus, 28, at, 0.35, 0.3, 0.5);
+    kick(bus, at, 0.5, 0.8);
   }
 
   stop(): void {

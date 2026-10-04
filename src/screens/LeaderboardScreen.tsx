@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { Icon } from '../components/Icon';
-import { fetchTopScores, type GlobalScore } from '../features/online/globalLeaderboard';
+import { fetchTopScores, PERIOD_TITLES, type GlobalScore, type LeaderboardPeriod } from '../features/online/globalLeaderboard';
 import { GAME_MODES, type GameModeId } from '../features/modes/modes';
 import type { Profile } from '../lib/storage';
 import { ONLINE_ENABLED } from '../lib/supabase';
@@ -18,7 +18,7 @@ type Load = { state: 'loading' } | { state: 'ready'; rows: GlobalScore[] } | { s
 
 export function LeaderboardScreen({ profile, initialMode, onBack }: LeaderboardScreenProps) {
   const [mode, setMode] = useState<GameModeId>(RANKED.some((m) => m.id === initialMode) ? initialMode : 'classic');
-  const [period, setPeriod] = useState<'all' | 'today'>(initialMode === 'daily' ? 'today' : 'all');
+  const [period, setPeriod] = useState<LeaderboardPeriod>(initialMode === 'daily' ? 'today' : 'all');
   const [load, setLoad] = useState<Load>(ONLINE_ENABLED ? { state: 'loading' } : { state: 'offline' });
 
   useEffect(() => {
@@ -70,7 +70,7 @@ export function LeaderboardScreen({ profile, initialMode, onBack }: LeaderboardS
           <div className="board-screen__panel-head">
             <p className="t-label">Весь мир</p>
             <div className="segmented" role="group" aria-label="Период">
-              {(['all', 'today'] as const).map((p) => (
+              {(['all', 'week', 'today'] as const).map((p) => (
                 <button
                   key={p}
                   type="button"
@@ -80,7 +80,7 @@ export function LeaderboardScreen({ profile, initialMode, onBack }: LeaderboardS
                     if (ONLINE_ENABLED) setLoad({ state: 'loading' });
                   }}
                 >
-                  {p === 'all' ? 'Всё время' : 'Сегодня'}
+                  {PERIOD_TITLES[p]}
                 </button>
               ))}
             </div>

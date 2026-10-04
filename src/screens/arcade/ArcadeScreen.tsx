@@ -17,7 +17,7 @@ import { arcadeTune, type Difficulty } from '../../features/modes/difficulty';
 import { effectiveDifficulty, supportsDifficulty, type ArcadeKind, type GameModeDef } from '../../features/modes/modes';
 import { ArcadeRenderer } from '../../features/render/ArcadeRenderer';
 import { useEngineFrame, useGestureEvents } from '../../hooks/useEngine';
-import { RunnerMusic } from '../../lib/audio/runnerMusic';
+import { comboLayers, RunnerMusic } from '../../lib/audio/runnerMusic';
 import { sfx } from '../../lib/audio/sfx';
 import { bestFor, type Profile, type RecordedSession } from '../../lib/storage';
 import './ArcadeScreen.css';
@@ -203,14 +203,24 @@ export function ArcadeScreen({ engine, mode, difficulty, profile, onRecord, onAg
         dt,
         now,
       );
-      for (const s of sounds) sfx.play(s);
+      for (const s of sounds) {
+        sfx.play(s);
+        // The player's catches and dodges play along with the track.
+        if (s === 'perfect') music.hit(true);
+        else if (s === 'orb' || s === 'clear') music.hit(false);
+        else if (s === 'miss') music.miss();
+      }
+      // A live move check for games whose expected move changes (the boss fight).
+      engine.setExpected(game.expected);
       if (game.done) finish();
     }
 
     rendererRef.current?.render(game, frame, now);
     const next = game.hud();
     if (music.playing) {
-      music.update(Math.min(3, Math.floor((next.progress ?? 0) * 4)));
+      // The series builds the music; a timed game also grows with the clock.
+      const byClock = Math.min(3, Math.floor((next.progress ?? 0) * 4));
+      music.update(kind === 'squats' ? byClock : Math.max(comboLayers(next.combo), Math.min(1, byClock)));
       // Freeze!: the music drops when the light turns red — like the playground game.
       const duck = game instanceof FreezeGame && game.light === 'red';
       if (duck !== ducked.current) {
