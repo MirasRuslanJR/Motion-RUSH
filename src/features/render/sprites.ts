@@ -43,7 +43,7 @@ export const PYLON_LENS_Y = 46 / 400;
  */
 const RASTER_SCALE = 2;
 const ready = new Map<SpriteName, HTMLCanvasElement>();
-let started = false;
+let loading: Promise<void> | null = null;
 
 export function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -55,27 +55,34 @@ export function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Starts loading every sprite once. Until a sprite is ready the renderer draws its vector fallback. */
-export function preloadSprites(): void {
-  if (started || typeof document === 'undefined') return;
-  started = true;
-  for (const name of Object.keys(SPRITES) as SpriteName[]) {
-    const source = SPRITES[name];
-    void loadImage(source.url).then(
-      (img) => {
-        const canvas = document.createElement('canvas');
-        canvas.width = source.width * RASTER_SCALE;
-        canvas.height = source.height * RASTER_SCALE;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        ready.set(name, canvas);
-      },
-      () => {
-        // Keep the vector fallback.
-      },
-    );
+/**
+ * Starts loading every sprite once; resolves when all of them have loaded (or failed).
+ * Until a sprite is ready the renderer draws its vector fallback.
+ */
+export function preloadSprites(): Promise<void> {
+  if (typeof document === 'undefined') return Promise.resolve();
+  if (!loading) {
+    loading = Promise.all(
+      (Object.keys(SPRITES) as SpriteName[]).map((name) => {
+        const source = SPRITES[name];
+        return loadImage(source.url).then(
+          (img) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = source.width * RASTER_SCALE;
+            canvas.height = source.height * RASTER_SCALE;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            ready.set(name, canvas);
+          },
+          () => {
+            // Keep the vector fallback.
+          },
+        );
+      }),
+    ).then(() => undefined);
   }
+  return loading;
 }
 
 /** A ready-to-draw sprite, or null while it is still loading. */

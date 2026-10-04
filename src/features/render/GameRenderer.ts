@@ -134,7 +134,7 @@ export class GameRenderer {
     this.backgroundCtx = background.getContext('2d', { alpha: false });
     // Soft gradients and 1-px stars do not need retina resolution.
     this.backgroundSizing = observeCanvas(background, (size) => this.drawBackground(size), 1);
-    preloadSprites();
+    void preloadSprites();
     void loadImage(BACKDROP.url).then(
       (img) => {
         if (this.disposed) return;

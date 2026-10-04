@@ -17,6 +17,7 @@ import { DEBUG } from '../lib/env';
 import { loadProfile, recordAchievements, recordSession, saveMuted, type Profile, type RecordedSession } from '../lib/storage';
 import { runnerFacts, type AchievementId, type SessionFacts } from '../features/achievements/achievements';
 import { AchievementToast } from '../components/AchievementToast';
+import { BootScreen } from '../components/BootScreen';
 import { ArcadeScreen, type ArcadeRunResult } from '../screens/arcade/ArcadeScreen';
 import { CalibrationScreen } from '../screens/CalibrationScreen';
 import { CameraCheckScreen } from '../screens/CameraCheckScreen';
@@ -47,6 +48,9 @@ function EngineWatcher({ engine, onFail }: { engine: MotionEngine; onFail: (kind
 
 export function App() {
   const [flow, dispatch] = useReducer(flowReducer, INITIAL_FLOW);
+  /** The loading screen covers the menu until the fonts, the art and the pose model are ready. */
+  const [booted, setBooted] = useState(false);
+  const onBooted = useCallback(() => setBooted(true), []);
   const [engine, setEngine] = useState<MotionEngine | null>(null);
   const engineRef = useRef<MotionEngine | null>(null);
   const [profile, setProfile] = useState<Profile>(loadProfile);
@@ -396,7 +400,7 @@ export function App() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className={`app app--${flow.phase}`}>
+      <div className={`app app--${flow.phase}`} inert={!booted}>
         {flow.phase !== 'menu' && <TopBar phase={flow.phase} muted={muted} onToggleMute={toggleMute} onHome={goHome} />}
         <div className="app__screens">
           <AnimatePresence initial={false}>
@@ -416,6 +420,7 @@ export function App() {
         <AchievementToast fresh={fresh} onDone={clearFresh} />
         {DEBUG && engine && <DebugPanel engine={engine} />}
       </div>
+      <AnimatePresence>{!booted && <BootScreen key="boot" onDone={onBooted} />}</AnimatePresence>
     </MotionConfig>
   );
 }

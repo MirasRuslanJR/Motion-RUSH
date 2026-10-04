@@ -26,3 +26,6 @@ const ART: Partial<Record<GameModeId, string>> = {
 export function modeArt(id: GameModeId): string {
   return ART[id] ?? runArt;
 }
+
+/** Every cover picture once (the loading screen waits for all of them). */
+export const MODE_ART_URLS: readonly string[] = [...new Set([runArt, ...Object.values(ART)])].filter((url): url is string => typeof url === 'string');
