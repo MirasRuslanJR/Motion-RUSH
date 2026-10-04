@@ -14,7 +14,9 @@ import { computeSessionStats } from '../features/results/sessionStats';
 import { useMotionUi } from '../hooks/useEngine';
 import { sfx } from '../lib/audio/sfx';
 import { DEBUG } from '../lib/env';
-import { loadProfile, recordSession, saveMuted, type Profile, type RecordedSession } from '../lib/storage';
+import { loadProfile, recordAchievements, recordSession, saveMuted, type Profile, type RecordedSession } from '../lib/storage';
+import { runnerFacts, type AchievementId, type SessionFacts } from '../features/achievements/achievements';
+import { AchievementToast } from '../components/AchievementToast';
 import { ArcadeScreen, type ArcadeRunResult } from '../screens/arcade/ArcadeScreen';
 import { CalibrationScreen } from '../screens/CalibrationScreen';
 import { CameraCheckScreen } from '../screens/CameraCheckScreen';
@@ -188,6 +190,19 @@ export function App() {
     else dispatch({ type: 'MENU' });
   }, [replaceRoom]);
 
+  /** Achievements unlocked by the last game, shown for a few seconds over any screen. */
+  const [fresh, setFresh] = useState<{ id: number; list: AchievementId[] } | null>(null);
+  const clearFresh = useCallback(() => setFresh(null), []);
+  /** Every finished game counts towards the achievements (after its own record is saved). */
+  const unlock = useCallback((facts: SessionFacts) => {
+    const { profile: next, unlocked } = recordAchievements(facts);
+    setProfile(next);
+    if (unlocked.length > 0) {
+      setFresh({ id: Date.now(), list: unlocked });
+      sfx.play('combo');
+    }
+  }, []);
+
   const onFinish = useCallback((result: SessionResult) => {
     if (getMode(result.mode).ranked) {
       const stats = computeSessionStats(result);
@@ -203,11 +218,15 @@ export function App() {
     } else {
       setRecorded(null);
     }
+    unlock(runnerFacts(result));
     dispatch({ type: 'GAME_OVER', result });
-  }, []);
+  }, [unlock]);
 
   const onDanceRecord = useCallback((run: DanceRunResult): RecordedSession | null => {
-    if (!getMode(run.mode).ranked) return null;
+    if (!getMode(run.mode).ranked) {
+      unlock({ dodges: 0, perfectStreak: 0, durationMs: 0, score: run.score });
+      return null;
+    }
     const saved = recordSession(run.mode, {
       score: run.score,
       accuracy: run.accuracy,
@@ -216,8 +235,9 @@ export function App() {
       date: new Date().toISOString(),
     });
     setProfile(saved.profile);
+    unlock({ dodges: 0, perfectStreak: 0, durationMs: 0, score: run.score });
     return saved;
-  }, []);
+  }, [unlock]);
 
   /** Mini-games: a record on this device, kept apart from the overall best score. */
   const onArcadeRecord = useCallback((run: ArcadeRunResult): RecordedSession => {
@@ -227,8 +247,9 @@ export function App() {
       { countsForProfile: false },
     );
     setProfile(saved.profile);
+    unlock(run.facts);
     return saved;
-  }, []);
+  }, [unlock]);
 
   /** The logo goes to the main menu; the camera stays on, so the next game starts right away. */
   const goHome = useCallback(() => {
@@ -392,6 +413,7 @@ export function App() {
           </AnimatePresence>
         </div>
         {engine && flow.phase !== 'camera-error' && <EngineWatcher engine={engine} onFail={onCameraFail} />}
+        <AchievementToast fresh={fresh} onDone={clearFresh} />
         {DEBUG && engine && <DebugPanel engine={engine} />}
       </div>
     </MotionConfig>

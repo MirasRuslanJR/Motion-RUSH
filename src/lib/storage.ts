@@ -1,4 +1,5 @@
 import type { GameOutcome } from '../features/gameplay/types';
+import { addSession, NO_ACHIEVEMENTS, type AchievementId, type AchievementState, type SessionFacts } from '../features/achievements/achievements';
 import { DEFAULT_DIFFICULTY, isDifficulty, type Difficulty } from '../features/modes/difficulty';
 
 const KEY = 'motion-rush:v1';
@@ -29,6 +30,7 @@ export interface Profile {
   playerId: string;
   /** Last difficulty picked in the menu. */
   difficulty: Difficulty;
+  achievements: AchievementState;
 }
 
 function randomId(): string {
@@ -48,6 +50,7 @@ const EMPTY = (): Profile => ({
   nickname: '',
   playerId: randomId(),
   difficulty: DEFAULT_DIFFICULTY,
+  achievements: { ...NO_ACHIEVEMENTS, unlocked: [] },
 });
 
 /** localStorage can throw (private mode, blocked storage) — the app must still work. */
@@ -62,6 +65,8 @@ export function loadProfile(): Profile {
     const parsed = JSON.parse(raw) as Partial<Profile> & { leaderboard?: LeaderboardEntry[] };
     const profile: Profile = { ...EMPTY(), ...parsed, leaderboards: { ...(parsed.leaderboards ?? {}) } };
     if (!isDifficulty(profile.difficulty)) profile.difficulty = DEFAULT_DIFFICULTY;
+    const a = profile.achievements as Partial<AchievementState> | undefined;
+    profile.achievements = { unlocked: Array.isArray(a?.unlocked) ? a.unlocked : [], dodges: typeof a?.dodges === 'number' ? a.dodges : 0 };
     // v1 kept one list — it belongs to the classic mode.
     if (parsed.leaderboard && !profile.leaderboards.classic) profile.leaderboards.classic = parsed.leaderboard;
     if (!parsed.playerId) saveProfile(profile);
@@ -116,6 +121,15 @@ export function recordSession(mode: string, entry: LeaderboardEntry, { countsFor
 
 export function saveMuted(muted: boolean): void {
   saveProfile({ ...loadProfile(), muted });
+}
+
+/** Adds a finished game to the achievements; returns the profile and what was unlocked. */
+export function recordAchievements(facts: SessionFacts): { profile: Profile; unlocked: AchievementId[] } {
+  const profile = loadProfile();
+  const { state, unlocked } = addSession(profile.achievements, facts);
+  const next = { ...profile, achievements: state };
+  saveProfile(next);
+  return { profile: next, unlocked };
 }
 
 export function saveDifficulty(difficulty: Difficulty): Profile {

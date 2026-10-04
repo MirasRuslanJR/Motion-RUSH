@@ -7,6 +7,7 @@ import { Icon } from '../../components/Icon';
 import { ModeIcon } from '../../components/ModeIcon';
 import { NicknameField } from '../../components/NicknameField';
 import type { MotionEngine } from '../../features/engine/MotionEngine';
+import { ACHIEVEMENTS, NOPE_DODGES } from '../../features/achievements/achievements';
 import { DIAGNOSIS_RULES } from '../../features/gestures/diagnosisRules';
 import { BODY_MOTION_META, type ExpectedMotion } from '../../features/gestures/types';
 import { DIFFICULTIES, difficultyOf, livesAt, type Difficulty } from '../../features/modes/difficulty';
@@ -21,7 +22,7 @@ import { ONLINE_ENABLED } from '../../lib/supabase';
 import { MenuScene } from './MenuScene';
 import './MenuScreen.css';
 
-type ItemId = 'play' | 'run' | 'arcade' | 'dance' | 'duo' | 'online' | 'leaderboard' | 'tutorial' | 'about';
+type ItemId = 'play' | 'run' | 'arcade' | 'dance' | 'duo' | 'online' | 'leaderboard' | 'achievements' | 'tutorial' | 'about';
 
 interface MenuItem {
   id: ItemId;
@@ -42,6 +43,7 @@ const ITEMS: readonly MenuItem[] = [
   { id: 'duo', title: 'Вдвоём', eyebrow: 'Двое у одной камеры', modes: ['versus', 'dance-duo'] },
   { id: 'online', title: 'Онлайн-дуэль', eyebrow: 'Один на один по сети', modes: ['duel'] },
   { id: 'leaderboard', title: 'Рейтинг', eyebrow: 'Лучшие игроки', modes: [] },
+  { id: 'achievements', title: 'Достижения', eyebrow: 'Награды за игру телом', modes: [] },
   { id: 'tutorial', title: 'Обучение', eyebrow: 'Четыре движения за минуту', modes: [] },
   { id: 'about', title: 'Как играть', eyebrow: 'Камера вместо джойстика', modes: [] },
 ];
@@ -288,6 +290,11 @@ export function MenuScreen({ engine, ready, profile, lastMode, invite, muted, on
                   <span className="menu__sq" aria-hidden="true" />
                   <span className="menu__item-title">{it.title}</span>
                   {it.modes.length > 1 && it.id !== 'play' && <span className="menu__count">{it.modes.length}</span>}
+                  {it.id === 'achievements' && (
+                    <span className="menu__count">
+                      {profile.achievements.unlocked.length}/{ACHIEVEMENTS.length}
+                    </span>
+                  )}
                 </button>
               </li>
             ))}
@@ -425,6 +432,27 @@ export function MenuScreen({ engine, ready, profile, lastMode, invite, muted, on
               <span>Открыть рейтинг</span>
               <Icon name="right" size={22} />
             </button>
+          </div>
+        )}
+
+        {active === 'achievements' && (
+          <div className="menu__info">
+            <ul className="menu__achv">
+              {ACHIEVEMENTS.map((a) => {
+                const on = profile.achievements.unlocked.includes(a.id);
+                return (
+                  <li key={a.id} className={on ? 'is-on' : undefined}>
+                    <span className="menu__achv-sq" aria-hidden="true" />
+                    <strong>{a.title}</strong>
+                    <span>
+                      {a.text}
+                      {a.id === 'nope' && !on && ` · ${Math.min(NOPE_DODGES, profile.achievements.dodges)} из ${NOPE_DODGES}`}
+                    </span>
+                    <em>{on ? 'Открыто' : 'Закрыто'}</em>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         )}
 

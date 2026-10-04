@@ -5,6 +5,7 @@ import { HoldGesture } from '../../components/HoldGesture';
 import { Icon } from '../../components/Icon';
 import { ModeIcon } from '../../components/ModeIcon';
 import { PoseGlyph } from '../../components/PoseGlyph';
+import type { SessionFacts } from '../../features/achievements/achievements';
 import { BossFight } from '../../features/arcade/boss';
 import { FreezeGame } from '../../features/arcade/freeze';
 import { ReactionGame } from '../../features/arcade/reaction';
@@ -28,6 +29,15 @@ export interface ArcadeRunResult {
   score: number;
   accuracy: number;
   bestCombo: number;
+  /** For the achievements. */
+  facts: SessionFacts;
+}
+
+/** What a mini-game adds to the achievements: the boss counts its dodges and its longest run of them. */
+function arcadeFacts(game: ArcadeGame, score: number): SessionFacts {
+  if (game instanceof BossFight) return { dodges: game.dodges, perfectStreak: game.bestStreak, durationMs: game.time, score };
+  const time = 'time' in game && typeof game.time === 'number' ? game.time : 0;
+  return { dodges: 0, perfectStreak: 0, durationMs: time, score };
 }
 
 interface ArcadeScreenProps {
@@ -162,7 +172,7 @@ export function ArcadeScreen({ engine, mode, difficulty, profile, onRecord, onAg
     engine.setExpected(null);
     const r = game.result();
     setResult(r);
-    setRecorded(onRecord({ mode: mode.id, score: r.score, accuracy: r.accuracy, bestCombo: r.bestCombo }));
+    setRecorded(onRecord({ mode: mode.id, score: r.score, accuracy: r.accuracy, bestCombo: r.bestCombo, facts: arcadeFacts(game, r.score) }));
     setStage('done');
   };
 

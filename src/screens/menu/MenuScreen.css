@@ -675,6 +675,75 @@
   color: var(--text-3);
 }
 
+/* Achievements: square tiles, lit when unlocked. */
+.menu__achv {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.menu__achv li {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  aspect-ratio: 1;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text-3);
+}
+
+.menu__achv strong {
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: 1.15;
+  color: var(--text-3);
+}
+
+.menu__achv em {
+  margin-top: auto;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.menu__achv-sq {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1.5px solid currentColor;
+}
+
+.menu__achv li.is-on {
+  border-color: var(--warn);
+  background: rgba(255, 199, 107, 0.08);
+  box-shadow: 0 0 22px -8px var(--warn);
+  color: var(--text-2);
+}
+
+.menu__achv li.is-on strong {
+  color: #fff;
+}
+
+.menu__achv li.is-on em {
+  color: var(--warn);
+}
+
+.menu__achv li.is-on .menu__achv-sq {
+  border-color: var(--warn);
+  background: var(--warn);
+  box-shadow: 0 0 10px var(--warn);
+}
+
 /* ── Right: the figure (or the camera once it is on) ── */
 .menu__hero {
   align-self: end;
@@ -820,8 +889,13 @@
     width: 100%;
   }
   .menu__stats,
-  .menu__moves {
+  .menu__moves,
+  .menu__achv {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .menu__achv li {
+    aspect-ratio: auto;
+    min-height: 120px;
   }
   .menu__privacy {
     left: 16px;
